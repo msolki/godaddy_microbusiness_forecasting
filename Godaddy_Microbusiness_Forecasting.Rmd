@@ -1,0 +1,241 @@
+---
+title: "Godaddy Microbusiness Forecasting"
+author: "Mohammad Solki"
+date: "2023-02-28"
+output: html_document
+---
+
+```{r}
+# Set the working directory
+setwd("/Users/dreamer/Downloads/Godaddy/godaddy_microbusiness_forecasting")
+```
+
+```{r}
+# Importing the libraries
+library(mice)
+library(ggplot2)
+library(dplyr)
+library(caret)
+library(gbm)
+
+# Code starts here
+
+# Replace mean_squared_error with RMSE
+RMSE <- caret::RMSE()
+
+```
+
+### Exploring the datasets
+
+Explore the datasets to get a better understanding of the data.\
+Load the train and test datasets into dataframes.
+
+```{r}
+# Load train.csv into a dataframe
+train_df <- read.csv("./datasets/train.csv")
+
+# Load test.csv into a dataframe
+test_df <- read.csv("./datasets/test.csv")
+
+# Load census_starter.csv into a dataframe
+census_df <- read.csv("./datasets/census_starter.csv")
+
+```
+
+Check the dataframes
+
+After reading the CSV files into dataframes, we should check whether the data is loaded correctly or not. We can use the head() function of R to display the first few rows of the dataframes and tail() function to display the last rows. This will display the first and last 10 rows of the train, test and census dataframes. We can also use other pandas functions such as info() and describe() to get more information about the dataframes, such as column names, data types, and summary statistics.
+
+```{r}
+# Display the first 10 rows of the dataframes
+head(train_df, n = 10)
+head(test_df, n = 10)
+head(census_df, n = 10)
+
+```
+
+```{r}
+# Display the last 10 rows of the dataframes
+tail(train_df, n = 10)
+tail(test_df, n = 10)
+tail(census_df, n = 10)
+```
+
+```{r}
+# Display information about the train dataframe
+str(train_df)
+cat(rep("=", 40), "\n") # Print a line of 40 equal signs
+summary(train_df)
+```
+
+```{r}
+# Display information about the test dataframe
+str(test_df)
+cat(rep("=", 40), "\n") # Print a line of 40 equal signs
+summary(test_df)
+```
+
+```{r}
+# Display information about the census dataframe
+str(census_df)
+cat(rep("=", 40), "\n") # Print a line of 40 equal signs
+summary(census_df)
+```
+
+The is.na() function is used to create a logical matrix where TRUE represents a missing value and FALSE represents a non-missing value. The colSums() function is then used to count the number of missing values in each column of the data frame. If the sum of a column is greater than 0, it means that there is at least one missing value in that column.
+
+```{r}
+# Check for missing values in the train data frame
+colSums(is.na(train_df))
+```
+
+```{r}
+# Check for missing values in the test data frame
+colSums(is.na(test_df))
+```
+
+```{r}
+# Check for missing values in the census data frame
+colSums(is.na(census_df))
+```
+
+We use the complete.cases() function to determine which rows have complete data and which rows have missing values. The complete.cases() function returns a logical vector indicating which rows have no missing values. Therefore, to identify the rows with missing values, we use the ! operator to negate the logical vector returned by complete.cases(). Then, we use the is.na() function to identify which columns have missing values for each missing row:
+
+```{r}
+# Identify rows with missing values in census_df
+missing_rows <- which(!complete.cases(census_df))
+```
+
+```{r}
+# Identify columns with missing values for each missing row
+for (i in missing_rows) {
+  cat("Row", i, "has missing values in columns:",
+      paste(names(census_df)[is.na(census_df[i,])], collapse = ", "), "\n")
+}
+print(census_df[missing_rows,])
+
+```
+
+We use the mice package to impute missing values in the census_df dataframe.
+
+m: the number of imputations to generate was set to 5, because, generally, m should be set to at least 5 for good imputation performance. creating too many datasets will increase the computational cost and may not necessarily lead to better results.
+
+maxit: maxit was set to 50 to allow for a larger number of iterations to ensure that the imputation algorithm converges and fills in missing values as accurately as possible.
+
+method: In this case, we are using "pmm" which stands for "Predictive Mean Matching", because it is a flexible and widely used imputation method that works well with continuous variables. The method estimates the missing values by drawing from a set of observed values that have similar characteristics to the missing values.
+
+```{r}
+# Impute missing data using mice
+imputed_df <- mice(census_df, m = 5, maxit = 50, method = "pmm")
+```
+
+```{r}
+# Extract imputed data
+imputed_data <- complete(imputed_df)
+
+# Check for missing values in imputed data
+colSums(is.na(imputed_data))
+
+```
+
+```{r}
+print(imputed_data[missing_rows,])
+```
+
+```{r}
+index <- unique(train_df$first_day_of_month)
+print(index)
+```
+
+training data is from 08/2019 to 10/2022
+
+```{r}
+index <- unique(test_df$first_day_of_month)
+print(index)
+```
+
+prediction dates are from 11/2022 to 06/2023
+
+## EDA
+
+To make analysis easier and be able to group the data by year and month, we'll extract year and month values from the first_day_of_month column in both train and test dataframes using apply() method and lambda function, and then create new columns called year (int), month (int), and year_month (str) in each dataframe to store these values.
+
+```{r}
+# Add year, month and year_month columns to train_df
+train_df$year <- as.integer(substr(train_df$first_day_of_month, 1, 4))
+train_df$month <- as.integer(substr(train_df$first_day_of_month, 6, 7))
+train_df$year_month <- substr(train_df$first_day_of_month, 1, 7)
+
+# Add year, month and year_month columns to test_df
+test_df$year <- as.integer(substr(test_df$first_day_of_month, 1, 4))
+test_df$month <- as.integer(substr(test_df$first_day_of_month, 6, 7))
+test_df$year_month <- substr(test_df$first_day_of_month, 1, 7)
+```
+
+```{r}
+str(train_df)
+cat(rep("=", 40), "\n")
+str(test_df)
+
+```
+
+```{r}
+# Group train_df by year_month and calculate the mean value of the target variable for each group
+train_df_mean <- aggregate(train_df$microbusiness_density, by=list(train_df$year_month), FUN=mean)
+names(train_df_mean) <- c("year_month", "microbusiness_density_mean")
+
+# Group train_df by year and calculate the mean value of the target variable for each group
+train_df_mean_year <- aggregate(train_df$microbusiness_density, by=list(train_df$year), FUN=mean)
+names(train_df_mean_year) <- c("year", "microbusiness_density_mean")
+
+# Group train_df by month and calculate the mean value of the target variable for each group
+train_df_mean_month <- aggregate(train_df$microbusiness_density, by=list(train_df$month), FUN=mean)
+names(train_df_mean_month) <- c("month", "microbusiness_density_mean")
+```
+
+```{r}
+library(ggplot2)
+
+# Group train_df by year_month and calculate the mean value of the target variable for each group
+train_df_mean <- train_df %>%
+  group_by(year_month) %>%
+  summarize(avg_microbusiness_density = mean(microbusiness_density))
+
+# Group train_df by year and calculate the mean value of the target variable for each group
+train_df_mean_year <- train_df %>%
+  group_by(year) %>%
+  summarize(avg_microbusiness_density = mean(microbusiness_density))
+
+# Group train_df by month and calculate the mean value of the target variable for each group
+train_df_mean_month <- train_df %>%
+  group_by(month) %>%
+  summarize(avg_microbusiness_density = mean(microbusiness_density))
+
+# Plot the year_month mean values
+p0 <- ggplot(train_df_mean, aes(x = year_month, y = avg_microbusiness_density)) +
+  geom_line() +
+  ggtitle("Overall Average Microbusiness Density") +
+  xlab("Year-Month") +
+  ylab("Average Microbusiness Density") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+# Plot the monthly mean values
+p1 <- ggplot(train_df_mean_month, aes(x = month, y = avg_microbusiness_density)) +
+  geom_line() +
+  ggtitle("Average Microbusiness Density by Month") +
+  xlab("Month") +
+  ylab("Average Microbusiness Density") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+# Plot the yearly mean values
+p2 <- ggplot(train_df_mean_year, aes(x = year, y = avg_microbusiness_density)) +
+  geom_line() +
+  ggtitle("Average Microbusiness Density by Year") +
+  xlab("Year") +
+  ylab("Average Microbusiness Density") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+# Display the plots side by side
+grid.arrange(p0, p1, p2, ncol=2)
+
+```
