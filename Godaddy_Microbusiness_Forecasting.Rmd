@@ -14,11 +14,14 @@ setwd("/Users/dreamer/Downloads/Godaddy/godaddy_microbusiness_forecasting")
 # Importing the libraries
 library(mice)
 library(ggplot2)
+library(gridExtra)
 library(dplyr)
 library(caret)
 library(gbm)
-library(ggmap)
+#library(png)
+#library(ggmap)
 library(viridis)
+library(mapdata)
 
 # Code starts here
 ```
@@ -339,4 +342,184 @@ p2 <-
 
 # Display the plots side by side
 grid.arrange(p1, p2, ncol=2)
+```
+
+```{r}
+# Aggregate the data by state to calculate the average Microbusiness Density per state
+avg_microbusiness_density <- train_df %>%
+  group_by(state) %>%
+  summarize(avg_microbusiness_density = mean(microbusiness_density))
+
+# Get a map of the US
+us_map <- map_data("state")
+
+# Convert state names to uppercase to match the data
+us_map$region <- toupper(us_map$region)
+
+# Merge the aggregated data with the US map
+us_map_with_data <- left_join(us_map, avg_microbusiness_density, by = c("region" = "state"))
+
+# Create the heatmap plot
+ggplot(us_map_with_data) +
+  geom_polygon(aes(x = long, y = lat, group = group, fill = avg_microbusiness_density)) +
+  scale_fill_gradient(low = "white", high = "red") +
+  ggtitle("Average Microbusiness Density per State") +
+  labs(fill = "Microbusiness Density") +
+  theme_void()
+
+```
+
+```{r}
+# Read in the shapefile of the US
+us_map <- st_read("cb_2019_us_state_20m.shp")
+
+# Aggregate the data by region to calculate the average Microbusiness Density per region
+avg_microbusiness_density <- train_df %>%
+  group_by(region) %>%
+  summarize(avg_microbusiness_density = mean(microbusiness_density))
+
+# Merge the aggregated data with the shapefile of the US
+us_map_with_data <- left_join(us_map, avg_microbusiness_density, by = c("BEA_Region" = "region"))
+
+# Create the heatmap plot
+ggplot(us_map_with_data) +
+  geom_sf(aes(fill = avg_microbusiness_density)) +
+  scale_fill_gradient(low = "white", high = "red") +
+  ggtitle("Average Microbusiness Density per BEA Region") +
+  labs(fill = "Microbusiness Density") +
+  theme_void()
+
+```
+
+```{r}
+library(ggplot2)
+library(dplyr)
+library(ggmap)
+library(viridis)
+
+# Load the data with region column
+data <- read.csv("data.csv")
+
+# Calculate the average Microbusiness Density per region
+avg_density <- data %>%
+  group_by(region) %>%
+  summarize(avg_density = mean(microbusiness_density))
+
+# Get the coordinates of the regions using ggmap library
+us_map <- get_map(location = "United States", zoom = 4, maptype = "terrain")
+region_coords <- data.frame(region = unique(data$region))
+region_coords <- mutate(region_coords, lon = NA, lat = NA)
+
+for(i in 1:nrow(region_coords)) {
+  region_coords$lat[i] <- mean(data$lat[data$region == region_coords$region[i]])
+  region_coords$lon[i] <- mean(data$lon[data$region == region_coords$region[i]])
+}
+
+# Merge the average density and region coordinates data
+map_data <- left_join(avg_density, region_coords, by = "region")
+
+# Create the heatmap plot
+ggmap(us_map) +
+  geom_point(data = map_data, aes(x = lon, y = lat, color = avg_density), size = 6, alpha = 0.8) +
+  scale_color_viridis(name = "Avg. Microbusiness Density", option = "plasma", trans = "log10") +
+  labs(title = "Average Microbusiness Density Per Region", subtitle = "Data source: data.csv", color = "") +
+  theme(plot.title = element_text(size = 20, face = "bold", margin = margin(b = 10)),
+        plot.subtitle = element_text(size = 14, margin = margin(b = 20)),
+        legend.title = element_text(size = 16),
+        legend.text = element_text(size = 14))
+
+```
+
+```{r}
+# Sample data for Microbusiness Density and region names
+micro_density <- data.frame(region = c("Northeast", "Midwest", "South", "West"),
+                            density = c(50, 75, 100, 125))
+
+# Sample data for region latitude and longitude
+region_coords <- data.frame(region = c("Northeast", "Midwest", "South", "West"),
+                            lon = c(-71.7182, -93.5815, -89.0022, -119.4179),
+                            lat = c(42.0324, 41.6005, 31.9686, 36.7783))
+
+# Merge datasets based on region names
+micro_coords <- merge(micro_density, region_coords, by = "region")
+
+# Create US map
+us_map <- map_data("state")
+
+# Create heatmap
+heatmap <- ggplot(micro_coords, aes(x = lon, y = lat, fill = density)) +
+           geom_tile() +
+           scale_fill_gradient(low = "white", high = "red")
+
+# Overlay heatmap onto US map
+heatmap_on_map <- heatmap + 
+                   geom_path(data = us_map, aes(x = long, y = lat, group = group), color = "black", alpha = 0.5) +
+                   coord_fixed(xlim = range(micro_coords$lon), ylim = range(micro_coords$lat), ratio = 1.3)
+
+# Display plot
+heatmap_on_map
+
+```
+
+```{r}
+df_avg <- train_df %>% 
+  group_by(region) %>% 
+  summarise(avg_microbusiness_density = mean(microbusiness_density))
+
+```
+
+```{r}
+df_map <- merge(map_data("county"), df_avg, by.x = "subregion", by.y = "region")
+```
+
+```{r}
+ggplot(df_map, aes(x = long, y = lat, group = group, fill = avg_microbusiness_density)) +
+  geom_polygon() +
+  scale_fill_gradient(low = "white", high = "red") +
+  coord_map() +
+  theme_void()
+```
+
+```{r}
+library(maps)
+library(mapdata)
+
+# Aggregate data by region and calculate the mean microbusiness density
+region_means <- aggregate(microbusiness_density ~ region, data = train_df, FUN = mean)
+
+# Create a US map
+map("state", fill = TRUE, col = "white", bg = "lightblue")
+
+# Add the regions with the mean microbusiness density as the fill color
+points(subset(mapdata, region_means$region == region), 
+       col = heat.colors(length(region_means$region))[region_means$microbusiness_density], 
+       pch = 15, cex = 2)
+
+```
+
+```{r}
+library(maps)
+library(mapdata)
+
+# Create a new variable that maps the region number to region name
+train_df$region_name <- ifelse(train_df$region == 1, "New England",
+                           ifelse(train_df$region == 2, "Mideast",
+                             ifelse(train_df$region == 3, "Great Lakes",
+                               ifelse(train_df$region == 4, "Plains",
+                                 ifelse(train_df$region == 5, "Southeast",
+                                   ifelse(train_df$region == 6, "Southwest",
+                                     ifelse(train_df$region == 7, "Rocky Mountain", "Far West")))))))
+
+
+# Aggregate data by region and calculate the mean microbusiness density
+region_means <- aggregate(microbusiness_density ~ region_name, data = train_df, FUN = mean)
+
+# Create a US map
+map("state", fill = TRUE, col = "white", bg = "lightblue")
+
+# Add the regions with the mean microbusiness density as the fill color
+points(subset(mapdata, mapdata$region %in% region_means$region_name), 
+       col = heat.colors(length(region_means$region_name))[region_means$microbusiness_density], 
+       pch = 15, cex = 2)
+
 ```
