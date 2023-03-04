@@ -17,12 +17,10 @@ library(ggplot2)
 library(dplyr)
 library(caret)
 library(gbm)
+library(ggmap)
+library(viridis)
 
 # Code starts here
-
-# Replace mean_squared_error with RMSE
-RMSE <- caret::RMSE()
-
 ```
 
 ### Exploring the datasets
@@ -176,32 +174,26 @@ test_df$year_month <- substr(test_df$first_day_of_month, 1, 7)
 str(train_df)
 cat(rep("=", 40), "\n")
 str(test_df)
-
 ```
 
 ```{r}
-# Group train_df by year_month and calculate the mean value of the target variable for each group
-train_df_mean <- aggregate(train_df$microbusiness_density, by=list(train_df$year_month), FUN=mean)
-names(train_df_mean) <- c("year_month", "microbusiness_density_mean")
-
-# Group train_df by year and calculate the mean value of the target variable for each group
-train_df_mean_year <- aggregate(train_df$microbusiness_density, by=list(train_df$year), FUN=mean)
-names(train_df_mean_year) <- c("year", "microbusiness_density_mean")
-
-# Group train_df by month and calculate the mean value of the target variable for each group
-train_df_mean_month <- aggregate(train_df$microbusiness_density, by=list(train_df$month), FUN=mean)
-names(train_df_mean_month) <- c("month", "microbusiness_density_mean")
-```
-
-```{r}
-library(ggplot2)
-
-# Group train_df by year_month and calculate the mean value of the target variable for each group
+# Group train_df by year_month and calculate the mean value of microbusiness_density for each group
 train_df_mean <- train_df %>%
   group_by(year_month) %>%
-  summarize(avg_microbusiness_density = mean(microbusiness_density))
+  summarise(mean_microbusiness_density = mean(microbusiness_density))
 
-# Group train_df by year and calculate the mean value of the target variable for each group
+# Create plot
+ggplot(train_df_mean, aes(x = year_month, y = mean_microbusiness_density, group = 1)) +
+  geom_line() +
+  labs(title = "Overall Average Microbusiness Density",
+       x = "Year-Month",
+       y = "Average Microbusiness Density") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+```
+
+```{r}
+# Group train_df by year and calculate the mean value of microbusiness_density for each group
 train_df_mean_year <- train_df %>%
   group_by(year) %>%
   summarize(avg_microbusiness_density = mean(microbusiness_density))
@@ -211,31 +203,140 @@ train_df_mean_month <- train_df %>%
   group_by(month) %>%
   summarize(avg_microbusiness_density = mean(microbusiness_density))
 
-# Plot the year_month mean values
-p0 <- ggplot(train_df_mean, aes(x = year_month, y = avg_microbusiness_density)) +
-  geom_line() +
-  ggtitle("Overall Average Microbusiness Density") +
-  xlab("Year-Month") +
-  ylab("Average Microbusiness Density") +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
-
 # Plot the monthly mean values
-p1 <- ggplot(train_df_mean_month, aes(x = month, y = avg_microbusiness_density)) +
+p1 <- 
+  ggplot(train_df_mean_month, aes(x = month, y = avg_microbusiness_density)) +
   geom_line() +
-  ggtitle("Average Microbusiness Density by Month") +
+  ggtitle("Avg Monthly Microbusiness Density") +
   xlab("Month") +
   ylab("Average Microbusiness Density") +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
 # Plot the yearly mean values
-p2 <- ggplot(train_df_mean_year, aes(x = year, y = avg_microbusiness_density)) +
+p2 <- 
+  ggplot(train_df_mean_year, aes(x = year, y = avg_microbusiness_density)) +
   geom_line() +
-  ggtitle("Average Microbusiness Density by Year") +
+  ggtitle("Avg Yearly Microbusiness Density") +
   xlab("Year") +
   ylab("Average Microbusiness Density") +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
 # Display the plots side by side
-grid.arrange(p0, p1, p2, ncol=2)
+grid.arrange(p1, p2, ncol=2)
+```
 
+The Bureau of Economic Analysis (BEA) divides the United States into eight distinct economic regions. These regions are based on similarities in economic characteristics such as industry composition, income levels, and employment patterns. The eight regions are:
+
+1.  New England: Connecticut, Maine, Massachusetts, New Hampshire, Rhode Island, and Vermont.
+
+    The economy in this region is largely based on manufacturing, healthcare, education, and finance.
+
+2.  Mideast: Delaware, Maryland, New Jersey, New York, Pennsylvania, and the District of Columbia.
+
+    The region has a diverse economy, with a mix of manufacturing, finance, healthcare, and professional services.
+
+3.  Great Lakes: Illinois, Indiana, Michigan, Ohio, and Wisconsin.
+
+    The region has a strong manufacturing base, particularly in the automotive industry, and also has a significant healthcare sector.
+
+4.  Plains: Iowa, Kansas, Minnesota, Missouri, Nebraska, North Dakota, and South Dakota.
+
+    Agriculture and energy production are major industries in this region, along with manufacturing and healthcare.
+
+5.  Southeast: Alabama, Arkansas, Florida, Georgia, Kentucky, Louisiana, Mississippi, North Carolina, South Carolina, Tennessee, Virginia, and West Virginia.
+
+    The Southeast has a diverse economy, with significant industries in healthcare, finance, and manufacturing, as well as tourism and agriculture.
+
+6.  Southwest: Arizona, New Mexico, Oklahoma, and Texas.
+
+    The region has a strong energy sector, particularly in oil and gas production, and also has significant industries in manufacturing, healthcare, and finance.
+
+7.  Rocky Mountain: Colorado, Idaho, Montana, Utah, and Wyoming.
+
+    The region is known for its natural resources, particularly in mining and energy production, as well as tourism, healthcare, and manufacturing.
+
+8.  Far West: Alaska, California, Hawaii, Nevada, Oregon, and Washington.
+
+    This region has a diverse economy, with significant industries in technology, finance, healthcare, and manufacturing, as well as tourism and agriculture.
+
+![](images/image-1098317081.png)
+
+```{r}
+# Create a new column named region and initialize all values as NA
+train_df$region <- NA
+
+# Assign region values based on state column
+for (i in 1:nrow(train_df)) {
+  if (train_df$state[i] %in% c("Connecticut", "Maine", "Massachusetts", "New Hampshire", "Rhode Island", "Vermont")) {
+    train_df$region[i] <- 1 # New England
+  } else if (train_df$state[i] %in% c("Delaware", "Maryland", "New Jersey", "New York", "Pennsylvania", "District of Columbia")) {
+    train_df$region[i] <- 2 # Mideast
+  } else if (train_df$state[i] %in% c("Illinois", "Indiana", "Michigan", "Ohio", "Wisconsin")) {
+    train_df$region[i] <- 3 # Great Lakes
+  } else if (train_df$state[i] %in% c("Iowa", "Kansas", "Minnesota", "Missouri", "Nebraska", "North Dakota", "South Dakota")) {
+    train_df$region[i] <- 4 # Plains
+  } else if (train_df$state[i] %in% c("Alabama", "Arkansas", "Florida", "Georgia", "Kentucky", "Louisiana", "Mississippi", "North Carolina", "South Carolina", "Tennessee", "Virginia", "West Virginia")) {
+    train_df$region[i] <- 5 # Southeast
+  } else if (train_df$state[i] %in% c("Arizona", "New Mexico", "Oklahoma", "Texas")) {
+    train_df$region[i] <- 6 # Southwest
+  } else if (train_df$state[i] %in% c("Colorado", "Idaho", "Montana", "Utah", "Wyoming")) {
+    train_df$region[i] <- 7 # Rocky Mountain
+  } else if (train_df$state[i] %in% c("Alaska", "California", "Hawaii", "Nevada", "Oregon", "Washington")) {
+    train_df$region[i] <- 8 # Far West
+  } else train_df$region[i] <- 0
+}
+
+```
+
+```{r}
+# Print all the unique values in the region column
+unique(train_df$region)
+```
+
+```{r}
+# Group train_df by Region and calculate the mean value of microbusiness_density for each group
+train_df_mean_region <- train_df %>%
+  group_by(region) %>%
+  summarize(avg_microbusiness_density = mean(microbusiness_density))
+
+
+# Plot the monthly mean values
+ggplot(train_df_mean_region, aes(x = region, y = avg_microbusiness_density)) +
+geom_line() +
+ggtitle("Average Microbusiness Density Per Region") +
+xlab("Region") +
+ylab("Average Microbusiness Density")
+```
+
+```{r}
+# Group train_df by year and calculate the mean value of microbusiness_density for each group
+train_df_mean_year <- train_df %>%
+  group_by(year) %>%
+  summarize(avg_microbusiness_density = mean(microbusiness_density))
+
+# Group train_df by month and calculate the mean value of the target variable for each group
+train_df_mean_month <- train_df %>%
+  group_by(month) %>%
+  summarize(avg_microbusiness_density = mean(microbusiness_density))
+
+# Plot the monthly mean values
+p1 <- 
+  ggplot(train_df_mean_month, aes(x = month, y = avg_microbusiness_density)) +
+  geom_line() +
+  ggtitle("Avg Monthly Microbusiness Density") +
+  xlab("Month") +
+  ylab("Average Microbusiness Density") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+# Plot the yearly mean values
+p2 <- 
+  ggplot(train_df_mean_year, aes(x = year, y = avg_microbusiness_density)) +
+  geom_line() +
+  ggtitle("Avg Yearly Microbusiness Density") +
+  xlab("Year") +
+  ylab("Average Microbusiness Density") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+# Display the plots side by side
+grid.arrange(p1, p2, ncol=2)
 ```
