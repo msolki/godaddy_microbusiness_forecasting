@@ -265,45 +265,85 @@ The Bureau of Economic Analysis (BEA) divides the United States into eight disti
 
     This region has a diverse economy, with significant industries in technology, finance, healthcare, and manufacturing, as well as tourism and agriculture.
 
-![Bureau of Economic Analysis Regional Divisions Map](images/image-1098317081.png)
+```{r}
+# Get the map of the United States
+us_map <- map_data("county")
+usa_map <- map_data("state")
+
+# Create a lookup table for state abbreviations and their corresponding full names
+state_names <- data.frame(state = state.abb, name = tolower(state.name))
+
+# Map the regions to the states
+region_map <- usa_map %>%
+#left_join(state_names, by = c("region" = "state")) %>%
+  left_join(state_names, by = c("region" = "name")) %>%
+# merge(usa_map, state_names, by.x=c("region"), by.y=c("name")) %>%
+  mutate(region = 
+           ifelse(region %in% c("connecticut", "maine", "massachusetts", "new hampshire", "rhode island", "vermont"), "New England",
+                         ifelse(region %in% c("delaware", "maryland", "new jersey", "new york", "pennsylvania", "district of columbia"), "Mideast",
+                                ifelse(region %in% c("illinois", "indiana", "michigan", "ohio", "wisconsin"), "Great Lakes",
+                                       ifelse(region %in% c("iowa", "kansas", "minnesota", "missouri", "nebraska", "north dakota", "south dakota"), "Plains",
+                                              ifelse(region %in% c("alabama", "arkansas", "florida", "georgia", "kentucky", "louisiana", "mississippi", "north carolina", "south carolina", "tennessee", "virginia", "west virginia"), "Southeast",
+                                                     ifelse(region %in% c("arizona", "new mexico", "oklahoma", "texas"), "Southwest",
+                                                            ifelse(region %in% c("colorado", "idaho", "montana", "utah", "wyoming"), "Rocky Mountain",
+                                                                   ifelse(region %in% c("alaska", "california", "hawaii", "nevada", "oregon", "washington"), "Far West", NA
+                                                                          )
+                                                                   )
+                                                            )
+                                                     )
+                                              )
+                                       )
+                                )
+                         )
+         )
+
+# Summarize the data to get the center coordinates of each state
+#state_centers <- region_map %>% 
+#  group_by(state) %>% 
+#  summarise(long = mean(long), lat = mean(lat))
+# add labels
+states <- aggregate(cbind(long, lat) ~ region, data=us_map, 
+                FUN=function(x)mean(range(x)))
+states$group <- c("AL", "AR", "AZ", "CA", "CO", "CT", "DE", "DC", "FL", "GA", "IA", 
+              "ID", "IL", "IN", "KS", "KY", "LA", "MA", "MD", "ME", "MI", "MN", 
+              "MO", "MS", "MT", "NC", "ND", "NE", "NH", "NJ", "NM", "NV", "NY", 
+              "OH", "OK", "OR", "PA", "RI", "SC", "SD", "TN", "TX", "UT", "VA", 
+              "VT", "WA", "WI", "WV", "WY")
+
+# names(states)[names(states) == "region"] <- "group"
+
+
+#Plot the map
+ggplot(region_map, aes(x = long, y = lat, group = group, fill = region)) +
+  geom_polygon(color = "black", show.legend = FALSE) +
+#  geom_text(aes(label = state), data = region_map, size = 3, vjust = 2, hjust = 2) +
+#  geom_text(aes(label = state), data = state_centers, size = 2, vjust = 2, hjust = 2) +
+  geom_text(data = states, aes(long, lat, label = group), size = 2.5, inherit.aes = FALSE, color = "white", fontface = "bold") +
+#  scale_fill_gradient(low = "white", high = "darkred") +
+#  scale_fill_manual(values = viridis(n = 60), na.value = "gray") +
+  labs(title = "Bureau of Economic Analysis Regional Divisions Map", fill = "Region") +
+#  geom_text(aes(x = long, y = lat, label = state), data = state_centers, size = 3, color = "white") +
+  theme_void() +
+  theme(panel.background = element_rect(fill = "gray75", color = NA))
+
+
+```
 
 ```{r}
-train_df <- train_df 
+str(states)
+```
+
+First, we need to convert state and county columns in `train_df` to lowercase letters. Because, the data from map_data() will be in lowercase and when merging two dataframes it might cause problems.
+
+```{r}
+# Convert state and county columns in train_df to lowercase
 train_df <- train_df %>% 
   mutate(state = tolower(state)) %>%
   mutate(county = tolower(county))
 
 ```
 
-```{r}
-# Define the colors for each region
-colors <- c("#CC0000", "#FF9900", "#FFFF00", "#00CC00", "#0099CC", "#0000CC", "#9900FF", "#FF00CC")
-
-#Get the map of the United States
-usa_map <- map_data("state")
-
-#Create a lookup table for state abbreviations and their corresponding full names
-state_names <- data.frame(state = state.abb, name = tolower(state.name))
-
-#Map the regions to the states
-region_map <- usa_map %>%
-left_join(state_names, by = c("region" = "state")) %>%
-mutate(region = ifelse(name %in% c("maine", "new hampshire", "vermont", "massachusetts", "rhode island", "connecticut"), "New England",
-ifelse(name %in% c("new york", "new jersey", "pennsylvania"), "Mideast",
-ifelse(name %in% c("wisconsin", "michigan", "illinois", "indiana", "ohio"), "Great Lakes",
-ifelse(name %in% c("north dakota", "south dakota", "nebraska", "kansas", "minnesota", "iowa", "missouri"), "Plains",
-ifelse(name %in% c("delaware", "maryland", "district of columbia", "virginia", "west virginia", "north carolina", "south carolina", "georgia", "florida"), "Southeast",
-ifelse(name %in% c("texas", "oklahoma", "arkansas", "louisiana"), "Southwest",
-ifelse(name %in% c("montana", "idaho", "wyoming", "nevada", "utah", "colorado", "arizona", "new mexico"), "Rocky Mountain",
-ifelse(name %in% c("washington", "oregon", "california", "alaska", "hawaii"), "Far West", NA)))))))))
-
-#Plot the map with regions colored differently
-ggplot(region_map, aes(x = long, y = lat, group = group, fill = region)) +
-geom_polygon(color = "black") +
-scale_fill_manual(values = colors, na.value = "gray") +
-labs(title = "BEA Regions of the United States", fill = "Region") +
-theme_void()
-```
+Then, we'll create a new column named region and assign region values based on state column:
 
 ```{r}
 # Create a new column named region and initialize all values as NA
@@ -340,14 +380,62 @@ unique(train_df$region)
 ```
 
 ```{r}
+# Group train_df by region and calculate average microbusiness density
 train_df %>%
   group_by(region) %>%
   summarize(avg_density = mean(microbusiness_density)) %>%
+
+  # Create bar plot of average density by region
   ggplot(aes(x = region, y = avg_density)) +
   geom_bar(stat = "identity") +
+  
+  # Add plot title and axis labels
   labs(title = "Average Microbusiness Density Per Region",
        x = "Region", y = "Avg Density") +
+  
+  # Apply a black and white theme to the plot
   theme_bw()
+```
+
+```{r}
+# Group train_df by region and calculate average microbusiness density
+avg_density <- train_df %>%
+  group_by(region) %>%
+  summarize(avg_density = mean(microbusiness_density))
+
+# Create a lookup table for state abbreviations and their corresponding full names
+state_names <- data.frame(state = state.abb, name = tolower(state.name))
+
+# Lowercase region column of region_map
+region_map <- region_map %>% 
+  mutate(region = tolower(region)) 
+
+# Merge the average density data with the region_map data
+plot_data <- merge(region_map, avg_density, by = "region") %>%
+  arrange(order)
+
+# Coordinates of the center of regions
+bea_regions <- data.frame(
+  group = c("New England", "Mideast", "Great Lakes", "Plains", 
+             "Southeast", "Southwest", "Rocky Mountain", "Far West"),
+  x = c(-71.8, -76.9, -86.6, -98.5, -82.4, -106.4, -111.1, -119.8),
+  y = c(42.2, 39, 43.4, 39.8, 32.6, 34.3, 44.4, 38.4)
+)
+
+# Create the plot
+ggplot(plot_data, aes(x = long, y = lat, group = group, fill = avg_density)) +
+  geom_polygon(color = "black") +
+  geom_label(data = bea_regions,
+             aes(x = x, y = y, label = group),
+             size = 3, fontface = "bold", 
+             label.padding = unit(0.2, "lines"),
+             label.size = 0.2,
+             fill = "gray75", color = "black") +
+  scale_fill_gradient(low = "white", high = "darkred") +
+  # scale_fill_viridis(name = "Avg Density", na.value = "gray") +
+  labs(title = "Average Microbusiness Density Per Region", fill = "Avg Density") +
+  theme_void()
+
 ```
 
 ```{r}
@@ -440,6 +528,8 @@ states$labels <- c("AL", "AR", "AZ", "CA", "CO", "CT", "DE", "DC", "FL", "GA", "
               "OH", "OK", "OR", "PA", "RI", "SC", "SD", "TN", "TX", "UT", "VA", 
               "VT", "WA", "WI", "WV", "WY")
 
+
+
 # plot and use padd zone as fill
 ggplot(us.map,  aes(x=long.transp, y=lat.transp), colour="white") + 
   geom_polygon(aes(group = group, fill=PADD)) +
@@ -451,30 +541,6 @@ ggplot(us.map,  aes(x=long.transp, y=lat.transp), colour="white") +
     axis.ticks = element_blank(),
     axis.text = element_blank()) +
   coord_equal()
-```
-
-```{r}
-us <- map_data("state")
-bea_regions <- data.frame(
-  region = c("New England", "Mideast", "Great Lakes", "Plains", 
-             "Southeast", "Southwest", "Rocky Mountain", "Far West"),
-  x = c(-71.8, -76.9, -86.6, -98.5, -82.4, -106.4, -111.1, -119.8),
-  y = c(42.2, 39, 43.4, 39.8, 32.6, 34.3, 44.4, 38.4)
-)
-ggplot() +
-  geom_map(data = us, map = us,
-           aes(x = long, y = lat, map_id = region),
-           fill = "white", color = "black", linewidth = 0.5) +
-  geom_label(data = bea_regions,
-             aes(x = x, y = y, label = region),
-             size = 3, fontface = "bold", 
-             label.padding = unit(0.2, "lines"),
-             label.size = 0.2,
-             fill = "lightblue", color = "black") +
-  coord_map() +
-  theme_void()
-
-
 ```
 
 ```{r}
@@ -503,6 +569,11 @@ for (i in 1:nrow(us_map)) {
     us_map$subregion[i] <- "other"
   }
 }
+
+
+```
+
+```{r}
 
 
 ```
