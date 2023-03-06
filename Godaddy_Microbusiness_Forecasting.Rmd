@@ -5,6 +5,10 @@ date: "2023-02-28"
 output: html_document
 ---
 
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
 ```{r}
 # Set the working directory
 setwd("/Users/dreamer/Downloads/Godaddy/godaddy_microbusiness_forecasting")
@@ -25,6 +29,8 @@ library(gbm)
 #library(ggmap)
 library(viridis)
 library(mapdata)
+library(corrplot)
+
 
 # Code starts here
 ```
@@ -91,6 +97,29 @@ The is.na() function is used to create a logical matrix where TRUE represents a 
 ```{r}
 # Check for missing values in the train data frame
 colSums(is.na(train_df))
+```
+
+```{r fig.width=6}
+#{r fig.width=7, fig.align='center', fig.height=4, out.width='100%'}
+# Calculate the number and percentage of missing values for each column
+missing_data <- census_df %>%
+  summarise_all(~ sum(is.na(.))) %>%
+  gather(variable, missing_count) %>%
+  mutate(missing_percent = missing_count/nrow(census_df)*100)
+
+# Create two plots side by side
+plot1 <- ggplot(missing_data, aes(x = missing_count, y = variable)) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  labs(x = "Number of missing values", y = "") +
+  ggtitle("Number of missing values in census_df")
+
+plot2 <- ggplot(missing_data, aes(x = missing_percent, y = variable)) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  labs(x = "Percentage of missing values", y = "") +
+  ggtitle("Percentage of missing values in census_df")
+
+# Arrange the two plots side by side
+grid.arrange(plot1, plot2, ncol = 2)
 ```
 
 ```{r}
@@ -160,7 +189,7 @@ print(index)
 
 prediction dates are from 11/2022 to 06/2023
 
-## EDA
+## Let's Do EDA
 
 To make analysis easier and be able to group the data by year and month, we'll extract year and month values from the first_day_of_month column in both train and test dataframes using apply() method and lambda function, and then create new columns called year (int), month (int), and year_month (str) in each dataframe to store these values.
 
@@ -177,28 +206,74 @@ test_df$year_month <- substr(test_df$first_day_of_month, 1, 7)
 ```
 
 ```{r}
+# Set variables of interest
+vars <- c("pct_bb", "pct_college", "pct_foreign_born", "pct_it_workers", "median_hh_inc")
+
+# Loop through variables and merge with train_df
+merged_df <- train_df
+
+for (var in vars) {
+  # Select columns and pivot longer
+  merged_df <- imputed_data %>%
+    select(cfips, paste0(var, "_2017"):paste0(var, "_2020")) %>%
+    pivot_longer(cols = starts_with(var),
+                 names_to = "year",
+                 values_to = var) %>%
+    # Modify year and month columns
+    mutate(year = as.integer(str_sub(year, -4)) + 2) %>%
+    uncount(12, .id = "month") %>%
+    mutate(month = month) %>%
+    # Merge with merged_df
+    merge(merged_df, by = c("cfips", "year", "month"), all.x = TRUE) %>%
+    arrange(cfips, row_id) 
+}
+merged_df <- merged_df %>%
+  select(row_id, cfips, county, state, first_day_of_month, microbusiness_density, active, year_month, year, month, pct_bb, pct_college, pct_foreign_born, pct_it_workers, median_hh_inc) %>%
+  # remove NA values created because of the 
+  na.omit(merged_df)
+```
+
+```{r}
+colSums(is.na(merged_df))
+```
+
+```{r}
 str(train_df)
 cat(rep("=", 40), "\n")
 str(test_df)
 ```
 
-```{r}
-# Group train_df by year_month and calculate the mean value of microbusiness_density for each group
-train_df_mean <- train_df %>%
+```{r fig.height=4}
+# Create plots
+p1 <- train_df %>%
+  # Group train_df by year_month
   group_by(year_month) %>%
-  summarise(mean_microbusiness_density = mean(microbusiness_density))
-
-# Create plot
-ggplot(train_df_mean, aes(x = year_month, y = mean_microbusiness_density, group = 1)) +
+  # calculate the mean value of microbusiness_density for each group
+  summarise(mean_microbusiness_density = mean(microbusiness_density)) %>%
+  ggplot(aes(x = year_month, y = mean_microbusiness_density, group = 1)) +
   geom_line() +
   labs(title = "Overall Average Microbusiness Density",
        x = "Year-Month",
        y = "Average Microbusiness Density") +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
+p2 <- train_df %>%
+  group_by(year_month) %>%
+  summarize(avg_active = mean(active)) %>%
+  ggplot(aes(x = year_month, y = avg_active)) +
+  geom_line(group = 1) +
+  labs(title = "Overall Active Microbusiness Count",
+       x = "Year-Month", 
+       y = "Active") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+
+# Display the plots
+grid.arrange(p1, p2, nrow = 2)
+
 ```
 
-```{r}
+```{r fig.height=3}
 # Group train_df by year and calculate the mean value of microbusiness_density for each group
 train_df_mean_year <- train_df %>%
   group_by(year) %>%
@@ -267,17 +342,16 @@ The Bureau of Economic Analysis (BEA) divides the United States into eight disti
 
 ```{r}
 # Get the map of the United States
-us_map <- map_data("county")
-usa_map <- map_data("state")
+us_map <- map_data("state")
 
 # Create a lookup table for state abbreviations and their corresponding full names
 state_names <- data.frame(state = state.abb, name = tolower(state.name))
 
 # Map the regions to the states
-region_map <- usa_map %>%
+region_map <- us_map %>%
 #left_join(state_names, by = c("region" = "state")) %>%
   left_join(state_names, by = c("region" = "name")) %>%
-# merge(usa_map, state_names, by.x=c("region"), by.y=c("name")) %>%
+# merge(us_map, state_names, by.x=c("region"), by.y=c("name")) %>%
   mutate(region = 
            ifelse(region %in% c("connecticut", "maine", "massachusetts", "new hampshire", "rhode island", "vermont"), "New England",
                          ifelse(region %in% c("delaware", "maryland", "new jersey", "new york", "pennsylvania", "district of columbia"), "Mideast",
@@ -315,7 +389,7 @@ states$group <- c("AL", "AR", "AZ", "CA", "CO", "CT", "DE", "DC", "FL", "GA", "I
 
 #Plot the map
 ggplot(region_map, aes(x = long, y = lat, group = group, fill = region)) +
-  geom_polygon(color = "black", show.legend = FALSE) +
+  geom_polygon(color = "black", show.legend = TRUE) +
 #  geom_text(aes(label = state), data = region_map, size = 3, vjust = 2, hjust = 2) +
 #  geom_text(aes(label = state), data = state_centers, size = 2, vjust = 2, hjust = 2) +
   geom_text(data = states, aes(long, lat, label = group), size = 2.5, inherit.aes = FALSE, color = "white", fontface = "bold") +
@@ -439,10 +513,6 @@ ggplot(plot_data, aes(x = long, y = lat, group = group, fill = avg_density)) +
 ```
 
 ```{r}
-str(train_df)
-```
-
-```{r}
 # Aggregate microbusiness density by state
 state_avg <- aggregate(microbusiness_density ~ state, data = train_df, FUN = mean)
 
@@ -463,23 +533,282 @@ ggplot(map_data, aes(x = long, y = lat, group = group, fill = microbusiness_dens
 ```
 
 ```{r}
+#{r fig.width = 10 ,fig.height = 12, out.width='100%', fig.align='center'}
 # Aggregate microbusiness density by county
-county_avg <- aggregate(microbusiness_density ~ county, data = train_df, FUN = mean)
+
+#county_avg <- train_df %>%
+#  group_by(cfips, county) %>%
+#  summarise(microbusiness_density = mean(microbusiness_density))
+
+county_avg <- aggregate(microbusiness_density ~ county + state, data = train_df, FUN = mean)
+county_avg$county <- gsub(" county", "", county_avg$county)
+county_avg$county <- gsub(" city", "", county_avg$county)
+county_avg$county <- gsub(" parish", "", county_avg$county)
+
 
 # Load US county map data
 us_map <- map_data("county")
 
 # Merge county_avg with us_map based on region and county
-map_data <- merge(us_map, county_avg, by.x = c("subregion"), by.y = c("county"))
+map_data <- merge(us_map, county_avg, by.x = c("subregion", "region"), by.y = c("county", "state")) %>%
+  arrange(order)
 
 # Create a heatmap of microbusiness density by county using ggplot2
 ggplot(map_data, aes(x = long, y = lat, group = group, fill = microbusiness_density)) +
   geom_polygon() +
-  scale_fill_gradient(low = "white", high = "navyblue") +
+  scale_fill_gradient(low = "lightblue", high = "navyblue") +
   coord_map() +
   labs(title = "Average Microbusiness Density per County", fill = "Density") +
   theme_void() +
-  theme(panel.background = element_rect(fill = "lightblue", color = NA))
+  theme(panel.background = element_rect(fill = "gray85", color = NA))
+
+```
+
+```{r}
+str(merged_df)
+```
+
+Boxplots are a visualization tool that provide insights into the central tendency and spread of a dataset, as well as identify outliers and skewness. They are useful for detecting anomalies and comparing variable distributions in a dataset, providing valuable insights into data distribution for exploratory data analysis.
+
+```{r fig.height=4, fig.width=3}
+boxplot(merged_df$microbusiness_density, col = "blue", main = "Microbusiness Density")
+```
+
+```{r fig.height=10, fig.width=4}
+par(mfrow=c(3,2)) # set plot layout to 3 rows and 2 columns
+boxplot(merged_df$median_hh_inc, col = "pink", main = "Median Household Income")
+boxplot(merged_df$pct_college, col = "pink", main = "Percentage with College Education")
+boxplot(merged_df$pct_foreign_born, col = "pink", main = "Percentage of Foreign-born Residents")
+boxplot(merged_df$pct_it_workers, col = "pink", main = "Percentage of IT Workers")
+boxplot(merged_df$pct_bb, color = "pink", main = "Percentage of Broadband Access")
+boxplot(merged_df$active, color = "pink", main = "Active Microbusiness Count")
+
+```
+
+### Outlier detection:
+
+Outlier detection is an important step in data analysis, as outliers can significantly affect the results of statistical analyses. One method for outlier detection is the decision range approach.
+
+The decision range approach involves setting a range of values outside of which any observations are considered outliers. The decision range is determined based on the data distribution and the researcher's judgment. One common approach is to use the interquartile range (IQR) to define the decision range. The IQR is calculated as the difference between the third quartile (Q3) and the first quartile (Q1) of the data.
+
+The decision range is then defined as the range from Q1 - 1.5*IQR to Q3 + 1.5*IQR. Any observations that fall outside of this range are considered outliers. This method is useful for identifying potential outliers in a dataset and can help to ensure that statistical analyses are robust and accurate.
+
+```{r}
+quartiles <- quantile(merged_df$microbusiness_density, probs = seq(0, 1, 0.25), na.rm = FALSE,
+         names = TRUE, type = 7, digits = 6)
+quartiles
+```
+
+```{r fig.width=12, fig.height=4}
+# Calculate the mean and standard deviation of 'microbusiness_density'
+mean_density <- mean(merged_df$microbusiness_density)
+sd_density <- sd(merged_df$microbusiness_density)
+
+# Create a range of values for the x-axis
+x_values <- seq(mean_density - 3*sd_density, mean_density + 3*sd_density, length.out = 1000)
+
+# Create a bell curve using the 'dnorm' function with mean and standard deviation calculated above
+y_values <- dnorm(x_values, mean = mean_density, sd = sd_density)
+
+# Combine the 'x_values' and 'y_values' into a data frame using the 'data.frame' function
+density_df <- data.frame(x = x_values, y = y_values)
+
+# Create a boxplot using the 'ggplot' function from 'ggplot2' package
+boxplot <- ggplot(data = merged_df, aes(x = "", y = merged_df$microbusiness_density)) +
+  geom_boxplot(fill = "skyblue") +
+  labs(x = "", y = "Microbusiness Density") +
+  ggtitle("Boxplot for Microbusiness Density")
+
+# Create a Q-Q plot using the 'ggplot' function from 'ggplot2' package and add a diagonal line using the 'geom_abline' function
+qqplot <- ggplot(data = density_df, aes(sample = x)) +
+  geom_qq() +
+  geom_abline(intercept = 0, slope = 1, colour = "red") +
+  labs(x = "Theoretical Normal Quantiles", y = "Observed Quantiles") +
+  ggtitle("Q-Q Plot for Microbusiness Density")
+
+# Create a bell curve using the 'ggplot' function from 'ggplot2' package and add the bell curve using the 'geom_line' function
+densityplot <- ggplot(data = merged_df, aes(x = microbusiness_density)) +
+  geom_histogram(aes(y = ..density..), bins = 30, colour = "black", fill = "white") +
+  geom_line(data = density_df, aes(x = x, y = y), colour = "red", size = 1) +
+  labs(x = "Microbusiness Density", y = "Density") +
+  ggtitle("Distribution of Microbusiness Density")
+
+# Arrange the plots in one row using the 'grid.arrange' function from the 'gridExtra' package
+grid.arrange(densityplot, boxplot, qqplot, ncol = 3, widths = c(2, 1, 2))
+
+```
+
+```{r}
+par(mfrow=c(1,3)) # set plot layout to 3 rows and 2 columns
+mean_density <- mean(merged_df$microbusiness_density)
+sd_density <- sd(merged_df$microbusiness_density)
+x_values <- seq(mean_density - 3*sd_density, mean_density + 3*sd_density, length.out = 1000)
+y_values <- dnorm(x_values, mean = mean_density, sd = sd_density)
+density_df <- data.frame(x = x_values, y = y_values)
+ggplot(merged_df, aes(x = microbusiness_density)) +
+  geom_histogram(aes(y = ..density..), bins = 30, colour = "black", fill = "lightblue") +
+  geom_line(data = density_df, aes(x = x, y = y), colour = "navy", linewidth = 1) +
+  labs(x = "Microbusiness Density", y = "Density") +
+  ggtitle("Distribution of Microbusiness Density") +
+  theme_minimal()
+
+theoretical_norm <- qnorm(p = seq(0, 1, length.out = length(merged_df$microbusiness_density)), mean = mean(merged_df$microbusiness_density), sd = sd(merged_df$microbusiness_density))
+density_df <- data.frame(observed = sort(merged_df$microbusiness_density), theoretical = theoretical_norm)
+ggplot(density_df, aes(x = theoretical, y = observed)) +
+  geom_point() +
+  geom_abline(intercept = 0, slope = 1, colour = "red") +
+  labs(x = "Theoretical Normal Quantiles", y = "Observed Quantiles") +
+  ggtitle("Q-Q Plot for Microbusiness Density")
+
+ggplot(data = merged_df, aes(x = "", y = microbusiness_density)) +
+  geom_boxplot(fill = "skyblue") +
+  labs(x = "", y = "Microbusiness Density") +
+  ggtitle("Boxplot for Microbusiness Density")
+
+```
+
+```{r}
+# compute the correlation matrix
+corr_matrix <- cor(imputed_data)
+
+# visualize the correlation matrix using corrplot
+corrplot(corr_matrix, type = "upper", method = "circle")
+```
+
+```{r}
+library(ggplot2)
+library(reshape2)
+
+# Calculate the correlation matrix
+cor_mat <- cor(imputed_data)
+
+# Melt the correlation matrix to a long format
+melted_cor <- melt(cor_mat)
+
+# Generate the heatmap
+ggplot(melted_cor, aes(x=Var1, y=Var2, fill=value)) + 
+  geom_tile() +
+  scale_fill_gradient2(low = "blue", high = "red", mid = "white", 
+                       midpoint = 0, limit = c(-1,1), space = "Lab", 
+                       name="Pearson\nCorrelation") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, 
+                                   size = 8, hjust = 1),
+        axis.text.y = element_text(size = 8),
+        axis.title = element_blank(),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        legend.justification = c(1, 0),
+        legend.position = c(0.8, 0.2),
+        legend.direction = "horizontal") 
+
+```
+
+```{r}
+str(imputed_data)
+```
+
+```{r}
+# Bar Plot
+ggplot(imputed_data, aes(x=cfips, y=median_hh_inc_2017)) +
+  geom_bar(stat="identity", fill="steelblue") +
+  labs(title = "Median Household Income in 2017",
+       x = "County FIPS Code", y = "Median Household Income")
+
+```
+
+```{r}
+# Pie Chart
+ggplot(imputed_data, aes(x="", y=pct_foreign_born_2017, fill=cfips)) +
+  geom_bar(width = 1, stat = "identity") +
+  coord_polar("y", start=0) +
+  labs(title = "Percentage of Foreign-born Population in 2017",
+       fill = "County FIPS Code")
+
+```
+
+```{r fig.width=4.5 ,fig.height = 4,out.width='100%', fig.align='center'}
+#creating a boxplot of the 'first_interval' column of the CustomerChurn_temp dataframe, grouped by the 'first_interval_label' column.
+ggplot(merged_df, aes("", microbusiness_density)) +
+  geom_boxplot()+scale_fill_manual(values = c("0" = "#009999","1" = "#CC3300"))
+```
+
+```{r}
+#Outlier Detection using decision range:
+#Any data point lies outside of this range is considered as outliers
+#We have lower bound and upper bound. any data outside of these 2 bounds will be considered as outliers. 
+#Here we are just going to consider to consider the upper bound, as we can't able to see any outliers in lower bound region.
+
+#Upper Bound: (Q3 + 1.5 * IQR)
+
+#Finding the Quartiles(2nd Quartile and 3rd quartile)
+quartiles <- quantile(train_df$microbusiness_density, probs=c(.25, .75), na.rm = FALSE)
+#quartiles
+
+#getting the IQR
+iqr<-IQR(train_df$microbusiness_density)
+#upper bound
+second_interval_ub <- quartiles[2] + 1.5*iqr 
+second_interval_ub
+
+#now we can label the second_interval based on upper bound
+train_df$microbusiness_density_label<-as.numeric(train_df$microbusiness_density > second_interval_ub)
+
+
+
+```
+
+```{r}
+# Create the plot
+ggplot(merged_df, aes(x = "", y = microbusiness_density)) +
+  geom_boxplot(fill = "lightblue") +
+  #labs(title = "doesn;t matter",
+  #     x = NULL, y = NULL) +
+  theme_minimal()
+```
+
+```{r}
+library(ggplot2)
+
+# Create the plot
+ggplot(imputed_data, aes(x = "", y = pct_bb_2021)) +
+  geom_boxplot(fill = "lightblue") +
+  labs(title = "Percentage of Population with Broadband Access in 2021",
+       x = NULL, y = "Percentage") +
+  theme_minimal()
+
+```
+
+```{r}
+# Create the box plot
+ggplot(imputed_data, aes(x = "", y = pct_bb_2017)) +
+  geom_boxplot(fill = "lightblue", color = "blue") +
+  labs(title = "Percentage of Broadband Access in 2017", y = "Percentage") +
+  theme_bw()
+
+```
+
+```{r}
+# Scatter Plot
+ggplot(imputed_data, aes(x=median_hh_inc_2017, y=pct_it_workers_2017)) +
+  geom_point() +
+  labs(title = "Percentage of IT Workers and Median Household Income in 2017",
+       x = "Median Household Income", y = "Percentage of IT Workers")
+
+```
+
+```{r}
+# Heatmap
+imputed_data_long <- melt(imputed_data, id.vars="cfips", 
+                          measure.vars=c("pct_bb_2017", "pct_bb_2018", "pct_bb_2019", 
+                                         "pct_bb_2020", "pct_bb_2021"), 
+                          variable.name="year", value.name="pct_bb")
+
+ggplot(imputed_data_long, aes(x=cfips, y=year, fill=pct_bb)) +
+  geom_tile() +
+  scale_fill_gradient(low="white", high="steelblue") +
+  labs(title = "Percentage of Broadband Coverage",
+       x = "County FIPS Code", y = "Year")
 
 ```
 
