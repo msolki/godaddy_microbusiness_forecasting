@@ -2,7 +2,9 @@
 title: "GoDaddy - Microbusiness Density Forecasting"
 author: "Mohammad Solki"
 date: "2023-02-28"
-output: html_document
+output:
+  pdf_document: default
+  html_document: default
 ---
 
 # 1. Introduction
@@ -78,7 +80,11 @@ A great deal of data is publicly available about counties and we have not attemp
 # 2. Setup the Environment
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(
+  echo = TRUE,
+  warning = FALSE,
+  out.width = '100%'
+  )
 ```
 
 First, we'll set the working directory using **`setwd()`**, and then import the required libraries. As we proceed through the report the list of libraries might change.
@@ -88,7 +94,7 @@ First, we'll set the working directory using **`setwd()`**, and then import the 
 setwd("/Users/dreamer/Downloads/Godaddy/godaddy_microbusiness_forecasting")
 ```
 
-```{r}
+```{r message = FALSE}
 # Importing the libraries
 library(tidyverse)
 # ggplot2, purrr, tibble, dplyr, tidyr, stringr, readr, forcats
@@ -102,6 +108,7 @@ library(gbm)
 library(viridis)
 library(mapdata)
 library(corrplot)
+library(reshape2)
 
 # libraries required for calculating SMAPE
 #library(forecast)
@@ -345,6 +352,12 @@ summary(merged_df)
 
 ## 3.7. Data Visualization
 
+The main feature in this project is `microbusiness_density` provided in the **train_df.** Also, the number of active microbusinesses is provided in the `active` column.
+
+### 3.7.1. Using Time Variables
+
+First, we will plot overall microbusiness density and count of active microbusiness in the United States:
+
 ```{r fig.height=4}
 # Create plots
 p1 <- train_df %>%
@@ -354,7 +367,7 @@ p1 <- train_df %>%
   summarise(mean_microbusiness_density = mean(microbusiness_density)) %>%
   ggplot(aes(x = year_month, y = mean_microbusiness_density, group = 1)) +
   geom_line() +
-  labs(title = "Overall Average Microbusiness Density",
+  labs(title = "Overall Microbusiness Density Average",
        x = "Year-Month",
        y = "Average Microbusiness Density") +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
@@ -375,72 +388,150 @@ grid.arrange(p1, p2, nrow = 2)
 
 ```
 
+As expected, these two graphs show almost similar behavior. If we ignore the slight fluctuations of the two graphs, the general microbusiness density and count are growing over the whole time frame.
+
+Then, we will examine the behavior of these two variables (*microbusiness density* and *active*) while grouping the data by month and year:
+
 ```{r fig.height=3}
-# Group train_df by year and calculate the mean value of microbusiness_density for each group
+# Group train_df by year and calculate the mean value of microbusiness_density and active for each group
 train_df_mean_year <- train_df %>%
   group_by(year) %>%
-  summarize(avg_microbusiness_density = mean(microbusiness_density))
+  summarize(avg_microbusiness_density = mean(microbusiness_density),
+            avg_active = mean(active))
 
-# Group train_df by month and calculate the mean value of the target variable for each group
+# Group train_df by month and calculate the mean value of the microbusiness_density for each group
 train_df_mean_month <- train_df %>%
   group_by(month) %>%
-  summarize(avg_microbusiness_density = mean(microbusiness_density))
+  summarize(avg_microbusiness_density = mean(microbusiness_density),
+            avg_active = mean(active))
 
-# Plot the monthly mean values
+# Plot the monthly mean values for microbusiness density
 p1 <- 
   ggplot(train_df_mean_month, aes(x = month, y = avg_microbusiness_density)) +
   geom_line() +
-  ggtitle("Avg Monthly Microbusiness Density") +
+  ggtitle("Average Monthly Microbusiness Density") +
   xlab("Month") +
-  ylab("Average Microbusiness Density") +
+  ylab("Avg Microbusiness Density") +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
-# Plot the yearly mean values
+# Plot the yearly mean values for microbusiness density
 p2 <- 
   ggplot(train_df_mean_year, aes(x = year, y = avg_microbusiness_density)) +
   geom_line() +
-  ggtitle("Avg Yearly Microbusiness Density") +
+  ggtitle("Average Yearly Microbusiness Density") +
   xlab("Year") +
-  ylab("Average Microbusiness Density") +
+  ylab("Avg Microbusiness Density") +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
+# Plot the monthly mean values for active
+p3 <- 
+  ggplot(train_df_mean_month, aes(x = month, y = avg_active)) +
+  geom_line() +
+  ggtitle("Average Monthly Active Microbusiness Count") +
+  xlab("Month") +
+  ylab("Avg Microbusiness Count") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+# Plot the yearly mean values for active
+p4 <- 
+  ggplot(train_df_mean_year, aes(x = year, y = avg_active)) +
+  geom_line() +
+  ggtitle("Average Yearly Active Microbusiness Count") +
+  xlab("Year") +
+  ylab("Avg Microbusiness Count") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) 
+
 # Display the plots side by side
-grid.arrange(p1, p2, ncol=2)
+grid.arrange(p2, p1, p4, p3, nrow = 2, ncol = 2)
 ```
 
-The Bureau of Economic Analysis (BEA) divides the United States into eight distinct economic regions. These regions are based on similarities in economic characteristics such as industry composition, income levels, and employment patterns. The eight regions are:
+The left plots show that the average microbusiness density has increased slightly over the years, starting at approximately 3.73 in 2019 and reaching 3.94 in 2022. On the other hand, the average active count has also increased, starting at approximately 6274 in 2019 and reaching 6679 in 2022. In comparison, the right plots show fluctuations in the monthly averages for both variables. Generally, it follows a slightly upward trend over the year, with some peak values observed in July and October for the microbusiness density and active count, respectively. These peak values may represent seasonal variations, indicating that microbusinesses are more active during certain months. Overall, the plot shows some correlation between the monthly average values of microbusiness_density and active count, indicating that common factors may influence both variables.
 
-1.  New England: Connecticut, Maine, Massachusetts, New Hampshire, Rhode Island, and Vermont.
+### 3.7.2. Using Geographical Measures
 
-    The economy in this region is largely based on manufacturing, healthcare, education, and finance.
+The Bureau of Economic Analysis (BEA) divides the United States into eight distinct economic regions[^1].
 
-2.  Mideast: Delaware, Maryland, New Jersey, New York, Pennsylvania, and the District of Columbia.
+[^1]: <https://doi.org/10.1371/journal.pone.0256407.g001>
 
-    The region has a diverse economy, with a mix of manufacturing, finance, healthcare, and professional services.
+These regions are based on similarities in economic characteristics such as industry composition, income levels, and employment patterns. The eight regions are:
 
-3.  Great Lakes: Illinois, Indiana, Michigan, Ohio, and Wisconsin.
+1.  **New England**: Connecticut, Maine, Massachusetts, New Hampshire, Rhode Island, and Vermont.
 
-    The region has a strong manufacturing base, particularly in the automotive industry, and also has a significant healthcare sector.
+    *The economy in this region is largely based on manufacturing, healthcare, education, and finance.*
 
-4.  Plains: Iowa, Kansas, Minnesota, Missouri, Nebraska, North Dakota, and South Dakota.
+2.  **Mideast**: Delaware, Maryland, New Jersey, New York, Pennsylvania, and the District of Columbia.
 
-    Agriculture and energy production are major industries in this region, along with manufacturing and healthcare.
+    *The region has a diverse economy, with a mix of manufacturing, finance, healthcare, and professional services.*
 
-5.  Southeast: Alabama, Arkansas, Florida, Georgia, Kentucky, Louisiana, Mississippi, North Carolina, South Carolina, Tennessee, Virginia, and West Virginia.
+3.  **Great Lakes**: Illinois, Indiana, Michigan, Ohio, and Wisconsin.
 
-    The Southeast has a diverse economy, with significant industries in healthcare, finance, and manufacturing, as well as tourism and agriculture.
+    *The region has a strong manufacturing base, particularly in the automotive industry, and also has a significant healthcare sector.*
 
-6.  Southwest: Arizona, New Mexico, Oklahoma, and Texas.
+4.  **Plains**: Iowa, Kansas, Minnesota, Missouri, Nebraska, North Dakota, and South Dakota.
 
-    The region has a strong energy sector, particularly in oil and gas production, and also has significant industries in manufacturing, healthcare, and finance.
+    *Agriculture and energy production are major industries in this region, along with manufacturing and healthcare.*
 
-7.  Rocky Mountain: Colorado, Idaho, Montana, Utah, and Wyoming.
+5.  **Southeast**: Alabama, Arkansas, Florida, Georgia, Kentucky, Louisiana, Mississippi, North Carolina, South Carolina, Tennessee, Virginia, and West Virginia.
 
-    The region is known for its natural resources, particularly in mining and energy production, as well as tourism, healthcare, and manufacturing.
+    *The Southeast has a diverse economy, with significant industries in healthcare, finance, and manufacturing, as well as tourism and agriculture.*
 
-8.  Far West: Alaska, California, Hawaii, Nevada, Oregon, and Washington.
+6.  **Southwest**: Arizona, New Mexico, Oklahoma, and Texas.
 
-    This region has a diverse economy, with significant industries in technology, finance, healthcare, and manufacturing, as well as tourism and agriculture.
+    *The region has a strong energy sector, particularly in oil and gas production, and also has significant industries in manufacturing, healthcare, and finance.*
+
+7.  **Rocky Mountain**: Colorado, Idaho, Montana, Utah, and Wyoming.
+
+    *The region is known for its natural resources, particularly in mining and energy production, as well as tourism, healthcare, and manufacturing.*
+
+8.  **Far West**: Alaska, California, Hawaii, Nevada, Oregon, and Washington.
+
+    *This region has a diverse economy, with significant industries in technology, finance, healthcare, and manufacturing, as well as tourism and agriculture.*
+
+To draw the map for the BEA regions, first, we need to convert state and county columns in **train_df** to lowercase letters. Merging two dataframes will cause problems because the data from **`map_data()`** will be in lowercase letters.
+
+```{r}
+# Convert state and county columns in train_df to lowercase
+train_df <- train_df %>% 
+  mutate(state = tolower(state)) %>%
+  mutate(county = tolower(county))
+
+```
+
+Then, we'll create a new column in **train_df** named `region` and assign region values based on `state` column:
+
+```{r}
+# Create a new column named region and initialize all values as NA
+train_df$region <- NA
+
+# Assign region values based on state column
+for (i in 1:nrow(train_df)) {
+  if (train_df$state[i] %in% c("connecticut", "maine", "massachusetts", "new hampshire", "rhode island", "vermont")) {
+    train_df$region[i] <- "new england"
+  } else if (train_df$state[i] %in% c("delaware", "maryland", "new jersey", "new york", "pennsylvania", "district of columbia")) {
+    train_df$region[i] <- "mideast"
+  } else if (train_df$state[i] %in% c("illinois", "indiana", "michigan", "ohio", "wisconsin")) {
+    train_df$region[i] <- "great lakes"
+  } else if (train_df$state[i] %in% c("iowa", "kansas", "minnesota", "missouri", "nebraska", "north dakota", "south dakota")) {
+    train_df$region[i] <- "plains"
+  } else if (train_df$state[i] %in% c("alabama", "arkansas", "florida", "georgia", "kentucky", "louisiana", "mississippi", "north carolina", "south carolina", "tennessee", "virginia", "west virginia")) {
+    train_df$region[i] <- "southeast"
+  } else if (train_df$state[i] %in% c("arizona", "new mexico", "oklahoma", "texas")) {
+    train_df$region[i] <- "southwest"
+  } else if (train_df$state[i] %in% c("colorado", "idaho", "montana", "utah", "wyoming")) {
+    train_df$region[i] <- "rocky mountain"
+  } else if (train_df$state[i] %in% c("alaska", "california", "hawaii", "nevada", "oregon", "washington")) {
+    train_df$region[i] <- "far west"
+  } else {
+    train_df$region[i] <- "other"
+  }
+}
+```
+
+```{r}
+str(train_df$states)
+```
+
+Now that the data in the dataframe matches the **`map_data()`** output, we appoint each state to the region it belongs to and then use **`ggplot()`** to draw the map:
 
 ```{r}
 # Get the map of the United States
@@ -463,15 +554,8 @@ region_map <- us_map %>%
                                                      ifelse(region %in% c("arizona", "new mexico", "oklahoma", "texas"), "Southwest",
                                                             ifelse(region %in% c("colorado", "idaho", "montana", "utah", "wyoming"), "Rocky Mountain",
                                                                    ifelse(region %in% c("alaska", "california", "hawaii", "nevada", "oregon", "washington"), "Far West", NA
-                                                                          )
-                                                                   )
-                                                            )
-                                                     )
-                                              )
-                                       )
-                                )
-                         )
-         )
+                                                                   )))))))))
+                                                                          
 
 # Summarize the data to get the center coordinates of each state
 #state_centers <- region_map %>% 
@@ -505,8 +589,7 @@ ggplot(region_map, aes(x = long, y = lat, group = group, fill = region)) +
 
 ```
 
-```{r}
-str(states)
+```{}
 ```
 
 First, we need to convert state and county columns in `train_df` to lowercase letters. Because, the data from map_data() will be in lowercase and when merging two dataframes it might cause problems.
@@ -519,34 +602,8 @@ train_df <- train_df %>%
 
 ```
 
-Then, we'll create a new column named region and assign region values based on state column:
-
 ```{r}
-# Create a new column named region and initialize all values as NA
-train_df$region <- NA
 
-# Assign region values based on state column
-for (i in 1:nrow(train_df)) {
-  if (train_df$state[i] %in% c("connecticut", "maine", "massachusetts", "new hampshire", "rhode island", "vermont")) {
-    train_df$region[i] <- "new england"
-  } else if (train_df$state[i] %in% c("delaware", "maryland", "new jersey", "new york", "pennsylvania", "district of columbia")) {
-    train_df$region[i] <- "mideast"
-  } else if (train_df$state[i] %in% c("illinois", "indiana", "michigan", "ohio", "wisconsin")) {
-    train_df$region[i] <- "great lakes"
-  } else if (train_df$state[i] %in% c("iowa", "kansas", "minnesota", "missouri", "nebraska", "north dakota", "south dakota")) {
-    train_df$region[i] <- "plains"
-  } else if (train_df$state[i] %in% c("alabama", "arkansas", "florida", "georgia", "kentucky", "louisiana", "mississippi", "north carolina", "south carolina", "tennessee", "virginia", "west virginia")) {
-    train_df$region[i] <- "southeast"
-  } else if (train_df$state[i] %in% c("arizona", "new mexico", "oklahoma", "texas")) {
-    train_df$region[i] <- "southwest"
-  } else if (train_df$state[i] %in% c("colorado", "idaho", "montana", "utah", "wyoming")) {
-    train_df$region[i] <- "rocky mountain"
-  } else if (train_df$state[i] %in% c("alaska", "california", "hawaii", "nevada", "oregon", "washington")) {
-    train_df$region[i] <- "far west"
-  } else {
-    train_df$region[i] <- "other"
-  }
-}
 
 ```
 
@@ -732,8 +789,8 @@ qqplot <- ggplot(data = density_df, aes(sample = x)) +
 
 # Create a bell curve using the 'ggplot' function from 'ggplot2' package and add the bell curve using the 'geom_line' function
 densityplot <- ggplot(data = merged_df, aes(x = microbusiness_density)) +
-  geom_histogram(aes(y = ..density..), bins = 30, colour = "black", fill = "white") +
-  geom_line(data = density_df, aes(x = x, y = y), colour = "red", size = 1) +
+  geom_histogram(aes(y = after_stat(density)), bins = 30, colour = "black", fill = "white") +
+  geom_line(data = density_df, aes(x = x, y = y), colour = "red", linewidth = 1) +
   labs(x = "Microbusiness Density", y = "Density") +
   ggtitle("Distribution of Microbusiness Density")
 
@@ -743,6 +800,7 @@ grid.arrange(densityplot, boxplot, qqplot, ncol = 3, widths = c(2, 1, 2))
 ```
 
 ```{r}
+
 par(mfrow=c(1,3)) # set plot layout to 3 rows and 2 columns
 mean_density <- mean(merged_df$microbusiness_density)
 sd_density <- sd(merged_df$microbusiness_density)
@@ -772,6 +830,8 @@ ggplot(data = merged_df, aes(x = "", y = microbusiness_density)) +
 ```
 
 ```{r}
+# draft (this is a test plot)
+
 # compute the correlation matrix
 corr_matrix <- cor(imputed_data)
 
@@ -780,8 +840,7 @@ corrplot(corr_matrix, type = "upper", method = "circle")
 ```
 
 ```{r}
-library(ggplot2)
-library(reshape2)
+# draft (this is a test plot)
 
 # Calculate the correlation matrix
 cor_mat <- cor(imputed_data)
@@ -813,6 +872,8 @@ str(imputed_data)
 ```
 
 ```{r}
+# draft (this is a test plot)
+
 # Bar Plot
 ggplot(imputed_data, aes(x=cfips, y=median_hh_inc_2017)) +
   geom_bar(stat="identity", fill="steelblue") +
@@ -822,6 +883,7 @@ ggplot(imputed_data, aes(x=cfips, y=median_hh_inc_2017)) +
 ```
 
 ```{r}
+# draft (this is a test plot)
 # Pie Chart
 ggplot(imputed_data, aes(x="", y=pct_foreign_born_2017, fill=cfips)) +
   geom_bar(width = 1, stat = "identity") +
@@ -832,37 +894,15 @@ ggplot(imputed_data, aes(x="", y=pct_foreign_born_2017, fill=cfips)) +
 ```
 
 ```{r fig.width=4.5 ,fig.height = 4,out.width='100%', fig.align='center'}
-#creating a boxplot of the 'first_interval' column of the CustomerChurn_temp dataframe, grouped by the 'first_interval_label' column.
+# draft (this is a test plot)
+#creating a boxplot
 ggplot(merged_df, aes("", microbusiness_density)) +
   geom_boxplot()+scale_fill_manual(values = c("0" = "#009999","1" = "#CC3300"))
 ```
 
 ```{r}
-#Outlier Detection using decision range:
-#Any data point lies outside of this range is considered as outliers
-#We have lower bound and upper bound. any data outside of these 2 bounds will be considered as outliers. 
-#Here we are just going to consider to consider the upper bound, as we can't able to see any outliers in lower bound region.
+# draft (this is a test plot)
 
-#Upper Bound: (Q3 + 1.5 * IQR)
-
-#Finding the Quartiles(2nd Quartile and 3rd quartile)
-quartiles <- quantile(train_df$microbusiness_density, probs=c(.25, .75), na.rm = FALSE)
-#quartiles
-
-#getting the IQR
-iqr<-IQR(train_df$microbusiness_density)
-#upper bound
-second_interval_ub <- quartiles[2] + 1.5*iqr 
-second_interval_ub
-
-#now we can label the second_interval based on upper bound
-train_df$microbusiness_density_label<-as.numeric(train_df$microbusiness_density > second_interval_ub)
-
-
-
-```
-
-```{r}
 # Create the plot
 ggplot(merged_df, aes(x = "", y = microbusiness_density)) +
   geom_boxplot(fill = "lightblue") +
@@ -872,7 +912,7 @@ ggplot(merged_df, aes(x = "", y = microbusiness_density)) +
 ```
 
 ```{r}
-library(ggplot2)
+# draft (this is a test plot)
 
 # Create the plot
 ggplot(imputed_data, aes(x = "", y = pct_bb_2021)) +
@@ -884,6 +924,8 @@ ggplot(imputed_data, aes(x = "", y = pct_bb_2021)) +
 ```
 
 ```{r}
+# draft (this is a test plot)
+
 # Create the box plot
 ggplot(imputed_data, aes(x = "", y = pct_bb_2017)) +
   geom_boxplot(fill = "lightblue", color = "blue") +
@@ -893,6 +935,8 @@ ggplot(imputed_data, aes(x = "", y = pct_bb_2017)) +
 ```
 
 ```{r}
+# draft (this is a test plot)
+
 # Scatter Plot
 ggplot(imputed_data, aes(x=median_hh_inc_2017, y=pct_it_workers_2017)) +
   geom_point() +
@@ -913,96 +957,6 @@ ggplot(imputed_data_long, aes(x=cfips, y=year, fill=pct_bb)) +
   scale_fill_gradient(low="white", high="steelblue") +
   labs(title = "Percentage of Broadband Coverage",
        x = "County FIPS Code", y = "Year")
-
-```
-
-```{r}
-
-us.map <-  map_data('state')
-
-# add PADD zones
-us.map$PADD[us.map$region %in% 
-          c("maine", "vermont", "new hampshire", "massachusetts", "connecticut", "rhode island",
-            "new york", "pennsylvania", "new jersey", "delaware", "district of columbia", "maryland",
-            "west virginia", "virginia", "north carolina", "south carolina", "georgia", "florida")] <- "PADD 1: East Coast"
-us.map$PADD[us.map$region %in% 
-          c("south dakota", "north dakota","nebraska", "kansas", "oklahoma", 
-            "minnesota", "iowa", "missouri", "wisconsin", "illinois", "indiana",
-            "michigan", "ohio", "kentucky", "tennessee")] <- "PADD 2: Midwest"
-us.map$PADD[us.map$region %in% 
-          c("new mexico", "texas", "arkansas", "louisiana", "alabama", "mississippi")] <- "PADD 3: Gulf Coast"
-us.map$PADD[us.map$region %in% 
-          c("montana", "idaho", "wyoming", "utah", "colorado")] <- "PADD 4: Rocky Mountain"
-us.map$PADD[us.map$region %in% 
-          c("washington", "oregon", "nevada", "arizona", "california")] <- "PADD 5: West Coast"
-
-# subset the dataframe by padd zones and move lat/lon accordingly
-us.map$lat.transp[us.map$PADD == "PADD 1: East Coast"] <- us.map$lat[us.map$PADD == "PADD 1: East Coast"]
-us.map$long.transp[us.map$PADD == "PADD 1: East Coast"] <- us.map$long[us.map$PADD == "PADD 1: East Coast"] + 5
-
-us.map$lat.transp[us.map$PADD == "PADD 2: Midwest"] <- us.map$lat[us.map$PADD == "PADD 2: Midwest"]
-us.map$long.transp[us.map$PADD == "PADD 2: Midwest"] <- us.map$long[us.map$PADD == "PADD 2: Midwest"]
-
-us.map$lat.transp[us.map$PADD == "PADD 3: Gulf Coast"] <- us.map$lat[us.map$PADD == "PADD 3: Gulf Coast"] - 3
-us.map$long.transp[us.map$PADD == "PADD 3: Gulf Coast"] <- us.map$long[us.map$PADD == "PADD 3: Gulf Coast"]
-
-us.map$lat.transp[us.map$PADD == "PADD 4: Rocky Mountain"] <- us.map$lat[us.map$PADD == "PADD 4: Rocky Mountain"]
-us.map$long.transp[us.map$PADD == "PADD 4: Rocky Mountain"] <- us.map$long[us.map$PADD == "PADD 4: Rocky Mountain"] - 5
-
-us.map$lat.transp[us.map$PADD == "PADD 5: West Coast"] <- us.map$lat[us.map$PADD == "PADD 5: West Coast"] - 2
-us.map$long.transp[us.map$PADD == "PADD 5: West Coast"] <- us.map$long[us.map$PADD == "PADD 5: West Coast"] - 10
-
-# add labels
-states <- aggregate(cbind(long.transp, lat.transp) ~ region, data=us.map, 
-                FUN=function(x)mean(range(x)))
-states$labels <- c("AL", "AR", "AZ", "CA", "CO", "CT", "DE", "DC", "FL", "GA", "IA", 
-              "ID", "IL", "IN", "KS", "KY", "LA", "MA", "MD", "ME", "MI", "MN", 
-              "MO", "MS", "MT", "NC", "ND", "NE", "NH", "NJ", "NM", "NV", "NY", 
-              "OH", "OK", "OR", "PA", "RI", "SC", "SD", "TN", "TX", "UT", "VA", 
-              "VT", "WA", "WI", "WV", "WY")
-
-
-
-# plot and use padd zone as fill
-ggplot(us.map,  aes(x=long.transp, y=lat.transp), colour="white") + 
-  geom_polygon(aes(group = group, fill=PADD)) +
-  geom_text(data=states, aes(long.transp, lat.transp, label=labels), size=3) +
-  theme(panel.background = element_blank(),  # remove background
-    panel.grid = element_blank(), 
-    axis.line = element_blank(), 
-    axis.title = element_blank(),
-    axis.ticks = element_blank(),
-    axis.text = element_blank()) +
-  coord_equal()
-```
-
-```{r}
-# Create a new column named "subregion" and initialize all values as NA
-us_map$subregion <- NA
-
-# Assign subregion values based on region column
-for (i in 1:nrow(us_map)) {
-  if (us_map$region[i] %in% c("connecticut", "maine", "massachusetts", "new hampshire", "rhode island", "vermont")) {
-    us_map$subregion[i] <- "new england"
-  } else if (us_map$region[i] %in% c("delaware", "maryland", "new jersey", "new york", "pennsylvania", "district of columbia")) {
-    us_map$subregion[i] <- "mideast"
-  } else if (us_map$region[i] %in% c("illinois", "indiana", "michigan", "ohio", "wisconsin")) {
-    us_map$subregion[i] <- "great lakes"
-  } else if (us_map$region[i] %in% c("iowa", "kansas", "minnesota", "missouri", "nebraska", "north dakota", "south dakota")) {
-    us_map$subregion[i] <- "plains"
-  } else if (us_map$region[i] %in% c("alabama", "arkansas", "florida", "georgia", "kentucky", "louisiana", "mississippi", "north carolina", "south carolina", "tennessee", "virginia", "west virginia")) {
-    us_map$subregion[i] <- "southeast"
-  } else if (us_map$region[i] %in% c("arizona", "new mexico", "oklahoma", "texas")) {
-    us_map$subregion[i] <- "southwest"
-  } else if (us_map$region[i] %in% c("colorado", "idaho", "montana", "utah", "wyoming")) {
-    us_map$subregion[i] <- "rocky Mountain"
-  } else if (us_map$region[i] %in% c("alaska", "california", "hawaii", "nevada", "oregon", "washington")) {
-    us_map$subregion[i] <- "far west"
-  } else {
-    us_map$subregion[i] <- "other"
-  }
-}
-
 
 ```
 
