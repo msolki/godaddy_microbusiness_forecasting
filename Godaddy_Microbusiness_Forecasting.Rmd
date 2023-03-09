@@ -3,8 +3,8 @@ title: "GoDaddy - Microbusiness Density Forecasting"
 author: "Mohammad Solki"
 date: "2023-02-28"
 output:
-  pdf_document: default
   html_document: default
+  pdf_document: default
 ---
 
 # 1. Introduction
@@ -118,7 +118,7 @@ library(Metrics)
 #smape(actual, forecasted)
 ```
 
-# 3. Explanatory Data Analysis
+# 3. Exploratory Data Analysis
 
 ## 3.1. Exploring the datasets
 
@@ -352,7 +352,7 @@ summary(merged_df)
 
 ## 3.7. Data Visualization
 
-The main feature in this project is `microbusiness_density` provided in the **train_df.** Also, the number of active microbusinesses is provided in the `active` column.
+The main feature in this project is `microbusiness_density` provided in the **merged_df.** Also, the number of active microbusinesses is provided in the `active` column.
 
 ### 3.7.1. Using Time Variables
 
@@ -360,8 +360,8 @@ First, we will plot overall microbusiness density and count of active microbusin
 
 ```{r fig.height=4}
 # Create plots
-p1 <- train_df %>%
-  # Group train_df by year_month
+p1 <- merged_df %>%
+  # Group merged_df by year_month
   group_by(year_month) %>%
   # calculate the mean value of microbusiness_density for each group
   summarise(mean_microbusiness_density = mean(microbusiness_density)) %>%
@@ -372,7 +372,7 @@ p1 <- train_df %>%
        y = "Average Microbusiness Density") +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
-p2 <- train_df %>%
+p2 <- merged_df %>%
   group_by(year_month) %>%
   summarize(avg_active = mean(active)) %>%
   ggplot(aes(x = year_month, y = avg_active)) +
@@ -393,21 +393,21 @@ As expected, these two graphs show almost similar behavior. If we ignore the sli
 Then, we will examine the behavior of these two variables (*microbusiness density* and *active*) while grouping the data by month and year:
 
 ```{r fig.height=3}
-# Group train_df by year and calculate the mean value of microbusiness_density and active for each group
-train_df_mean_year <- train_df %>%
+# Group merged_df by year and calculate the mean value of microbusiness_density and active for each group
+merged_df_mean_year <- merged_df %>%
   group_by(year) %>%
   summarize(avg_microbusiness_density = mean(microbusiness_density),
             avg_active = mean(active))
 
-# Group train_df by month and calculate the mean value of the microbusiness_density for each group
-train_df_mean_month <- train_df %>%
+# Group merged_df by month and calculate the mean value of the microbusiness_density for each group
+merged_df_mean_month <- merged_df %>%
   group_by(month) %>%
   summarize(avg_microbusiness_density = mean(microbusiness_density),
             avg_active = mean(active))
 
 # Plot the monthly mean values for microbusiness density
 p1 <- 
-  ggplot(train_df_mean_month, aes(x = month, y = avg_microbusiness_density)) +
+  ggplot(merged_df_mean_month, aes(x = month, y = avg_microbusiness_density)) +
   geom_line() +
   ggtitle("Average Monthly Microbusiness Density") +
   xlab("Month") +
@@ -416,7 +416,7 @@ p1 <-
 
 # Plot the yearly mean values for microbusiness density
 p2 <- 
-  ggplot(train_df_mean_year, aes(x = year, y = avg_microbusiness_density)) +
+  ggplot(merged_df_mean_year, aes(x = year, y = avg_microbusiness_density)) +
   geom_line() +
   ggtitle("Average Yearly Microbusiness Density") +
   xlab("Year") +
@@ -425,7 +425,7 @@ p2 <-
 
 # Plot the monthly mean values for active
 p3 <- 
-  ggplot(train_df_mean_month, aes(x = month, y = avg_active)) +
+  ggplot(merged_df_mean_month, aes(x = month, y = avg_active)) +
   geom_line() +
   ggtitle("Average Monthly Active Microbusiness Count") +
   xlab("Month") +
@@ -434,7 +434,7 @@ p3 <-
 
 # Plot the yearly mean values for active
 p4 <- 
-  ggplot(train_df_mean_year, aes(x = year, y = avg_active)) +
+  ggplot(merged_df_mean_year, aes(x = year, y = avg_active)) +
   geom_line() +
   ggtitle("Average Yearly Active Microbusiness Count") +
   xlab("Year") +
@@ -446,6 +446,27 @@ grid.arrange(p2, p1, p4, p3, nrow = 2, ncol = 2)
 ```
 
 The left plots show that the average microbusiness density has increased slightly over the years, starting at approximately 3.73 in 2019 and reaching 3.94 in 2022. On the other hand, the average active count has also increased, starting at approximately 6274 in 2019 and reaching 6679 in 2022. In comparison, the right plots show fluctuations in the monthly averages for both variables. Generally, it follows a slightly upward trend over the year, with some peak values observed in July and October for the microbusiness density and active count, respectively. These peak values may represent seasonal variations, indicating that microbusinesses are more active during certain months. Overall, the plot shows some correlation between the monthly average values of microbusiness_density and active count, indicating that common factors may influence both variables.
+
+```{r}
+# Create a grid of box plots
+ggplot(merged_df, aes(x=year_month, y=microbusiness_density)) +
+  geom_boxplot() +
+  labs(x="Year-Month", y="Microbusiness Density") +
+  ggtitle("Overall Microbusiness Density Average") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+Above plot is not very informative because the small values are obscured by the larger ones. Therefore, using a logarithmic scale on the Y-axis can help to reduce this distortion and provide a more informative visualization of the data.
+
+```{r}
+# Create a grid of box plots
+ggplot(merged_df, aes(x=year_month, y=microbusiness_density)) +
+  geom_boxplot() +
+  scale_y_log10() +
+  labs(x="Year-Month", y="Microbusiness Density") +
+  ggtitle("Overall Microbusiness Density Average") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
 
 ### 3.7.2. Using Geographical Measures
 
@@ -487,48 +508,49 @@ These regions are based on similarities in economic characteristics such as indu
 
     *This region has a diverse economy, with significant industries in technology, finance, healthcare, and manufacturing, as well as tourism and agriculture.*
 
-To draw the map for the BEA regions, first, we need to convert state and county columns in **train_df** to lowercase letters. Merging two dataframes will cause problems because the data from **`map_data()`** will be in lowercase letters.
+To draw the map for the BEA regions, first, we need to convert state and county columns in **merged_df** to lowercase letters. Merging two dataframes will cause problems because the data from **`map_data()`** will be in lowercase letters.
 
 ```{r}
-# Convert state and county columns in train_df to lowercase
-train_df <- train_df %>% 
+# Convert state and county columns in merged_df to lowercase
+merged_df <- merged_df %>% 
   mutate(state = tolower(state)) %>%
   mutate(county = tolower(county))
 
 ```
 
-Then, we'll create a new column in **train_df** named `region` and assign region values based on `state` column:
+Then, we'll create a new column in **merged_df** named `region` and assign region values based on `state` column:
 
 ```{r}
 # Create a new column named region and initialize all values as NA
-train_df$region <- NA
+merged_df$region <- NA
 
 # Assign region values based on state column
-for (i in 1:nrow(train_df)) {
-  if (train_df$state[i] %in% c("connecticut", "maine", "massachusetts", "new hampshire", "rhode island", "vermont")) {
-    train_df$region[i] <- "new england"
-  } else if (train_df$state[i] %in% c("delaware", "maryland", "new jersey", "new york", "pennsylvania", "district of columbia")) {
-    train_df$region[i] <- "mideast"
-  } else if (train_df$state[i] %in% c("illinois", "indiana", "michigan", "ohio", "wisconsin")) {
-    train_df$region[i] <- "great lakes"
-  } else if (train_df$state[i] %in% c("iowa", "kansas", "minnesota", "missouri", "nebraska", "north dakota", "south dakota")) {
-    train_df$region[i] <- "plains"
-  } else if (train_df$state[i] %in% c("alabama", "arkansas", "florida", "georgia", "kentucky", "louisiana", "mississippi", "north carolina", "south carolina", "tennessee", "virginia", "west virginia")) {
-    train_df$region[i] <- "southeast"
-  } else if (train_df$state[i] %in% c("arizona", "new mexico", "oklahoma", "texas")) {
-    train_df$region[i] <- "southwest"
-  } else if (train_df$state[i] %in% c("colorado", "idaho", "montana", "utah", "wyoming")) {
-    train_df$region[i] <- "rocky mountain"
-  } else if (train_df$state[i] %in% c("alaska", "california", "hawaii", "nevada", "oregon", "washington")) {
-    train_df$region[i] <- "far west"
+for (i in 1:nrow(merged_df)) {
+  if (merged_df$state[i] %in% c("connecticut", "maine", "massachusetts", "new hampshire", "rhode island", "vermont")) {
+    merged_df$region[i] <- "new england"
+  } else if (merged_df$state[i] %in% c("delaware", "maryland", "new jersey", "new york", "pennsylvania", "district of columbia")) {
+    merged_df$region[i] <- "mideast"
+  } else if (merged_df$state[i] %in% c("illinois", "indiana", "michigan", "ohio", "wisconsin")) {
+    merged_df$region[i] <- "great lakes"
+  } else if (merged_df$state[i] %in% c("iowa", "kansas", "minnesota", "missouri", "nebraska", "north dakota", "south dakota")) {
+    merged_df$region[i] <- "plains"
+  } else if (merged_df$state[i] %in% c("alabama", "arkansas", "florida", "georgia", "kentucky", "louisiana", "mississippi", "north carolina", "south carolina", "tennessee", "virginia", "west virginia")) {
+    merged_df$region[i] <- "southeast"
+  } else if (merged_df$state[i] %in% c("arizona", "new mexico", "oklahoma", "texas")) {
+    merged_df$region[i] <- "southwest"
+  } else if (merged_df$state[i] %in% c("colorado", "idaho", "montana", "utah", "wyoming")) {
+    merged_df$region[i] <- "rocky mountain"
+  } else if (merged_df$state[i] %in% c("alaska", "california", "hawaii", "nevada", "oregon", "washington")) {
+    merged_df$region[i] <- "far west"
   } else {
-    train_df$region[i] <- "other"
+    merged_df$region[i] <- "other"
   }
 }
 ```
 
 ```{r}
-str(train_df$states)
+# Print all the unique values in the region column
+unique(merged_df$region)
 ```
 
 Now that the data in the dataframe matches the **`map_data()`** output, we appoint each state to the region it belongs to and then use **`ggplot()`** to draw the map:
@@ -589,32 +611,18 @@ ggplot(region_map, aes(x = long, y = lat, group = group, fill = region)) +
 
 ```
 
-```{}
-```
-
-First, we need to convert state and county columns in `train_df` to lowercase letters. Because, the data from map_data() will be in lowercase and when merging two dataframes it might cause problems.
-
-```{r}
-# Convert state and county columns in train_df to lowercase
-train_df <- train_df %>% 
-  mutate(state = tolower(state)) %>%
-  mutate(county = tolower(county))
-
-```
-
 ```{r}
 
 
 ```
 
 ```{r}
-# Print all the unique values in the region column
-unique(train_df$region)
+
 ```
 
 ```{r}
-# Group train_df by region and calculate average microbusiness density
-train_df %>%
+# Group merged_df by region and calculate average microbusiness density
+merged_df %>%
   group_by(region) %>%
   summarize(avg_density = mean(microbusiness_density)) %>%
 
@@ -630,9 +638,12 @@ train_df %>%
   theme_bw()
 ```
 
+According to the above plot *New England* has the highest average microbusiness density, followed by *Farwest* and *Rocky Mountain* respectively, with a tiny difference, valuing more than 6.75. In contrast, *plains* has the lowest average microbusiness density, followed by *Southeast* and *Southwest*, all valued under 3.25. We can use a choropleth map to get a better view on the above information.
+
 ```{r}
-# Group train_df by region and calculate average microbusiness density
-avg_density <- train_df %>%
+# choropleth map
+# Group merged_df by region and calculate average microbusiness density
+avg_density <- merged_df %>%
   group_by(region) %>%
   summarize(avg_density = mean(microbusiness_density))
 
@@ -655,7 +666,7 @@ bea_regions <- data.frame(
   y = c(42.2, 39, 43.4, 39.8, 32.6, 34.3, 44.4, 38.4)
 )
 
-# Create the plot
+# Create the plot 
 ggplot(plot_data, aes(x = long, y = lat, group = group, fill = avg_density)) +
   geom_polygon(color = "black") +
   geom_label(data = bea_regions,
@@ -664,16 +675,54 @@ ggplot(plot_data, aes(x = long, y = lat, group = group, fill = avg_density)) +
              label.padding = unit(0.2, "lines"),
              label.size = 0.2,
              fill = "gray75", color = "black") +
-  scale_fill_gradient(low = "white", high = "darkred") +
+  
+  scale_fill_gradient(low = "gray85", high = "darkred") +
   # scale_fill_viridis(name = "Avg Density", na.value = "gray") +
   labs(title = "Average Microbusiness Density Per Region", fill = "Avg Density") +
-  theme_void()
+  theme_void() 
+#  theme(panel.background = element_rect(fill = "gray90", color = NA))
+```
+
+Although, we can only see only one parameter on a bar plot. To have a better look on the distribution, central tendency, spread, and variability of the `microbusiness_density` variable, we can use boxplots.
+
+```{r}
+
+# Aggregate data by region
+df_by_region <- aggregate(microbusiness_density ~ region, merged_df, median)
+
+# Create boxplot
+ggplot(merged_df, aes(x = region, y = microbusiness_density)) +
+  geom_boxplot() +
+  labs(x = "Region", y = "Microbusiness Density") +
+  # Arrange plots in grid
+  facet_wrap(~ region, scales = "free", nrow = 2)
+
+```
+
+Above plots are not very informative because the small values are obscured by the larger ones. Therefore, using a logarithmic scale on the Y-axis can help to reduce this distortion and provide a more informative visualization of the data.
+
+```{r}
+# Create a grid of box plots
+ggplot(merged_df, aes(x=region, y=microbusiness_density)) +
+  geom_boxplot() +
+  scale_y_log10() +
+  labs(x="Region", y="Microbusiness Density") +
+  ggtitle("Microbusiness Density by Region")
+
+```
+
+These boxplots are more informative, because using a logarithmic scale on the Y-axis helps to better reveal the differences and similarities between regions that helps to highlight any potential patterns or trends in the data. Some of the points that can be inferred from this boxplot include:\
+- all regions have at least some microbusiness activity. Because minimum microbusiness density is greater than 0 in all regions - The median microbusiness density is highest in the Rocky Mountain region, followed by the Far West and the Mideast regions. - The 3rd quartile microbusiness density is highest in the Far West region, followed by the Rocky Mountain and the Mideast regions. - The maximum microbusiness density is highest in the Plains region, followed by the Far West and the Rocky Mountain regions. - The mean microbusiness density is highest in the Far West region, followed by the Rocky Mountain and the Mideast regions. - The interquartile range (IQR = the difference between the 1st and 3rd quartiles) of microbusiness density is widest in the Plains region, indicating that there is a greater range of microbusiness density in that region. In contrast, the IQR is narrowest in the Southeast region.
+
+```{r}
+
+by(merged_df$microbusiness_density, merged_df$region, summary)
 
 ```
 
 ```{r}
 # Aggregate microbusiness density by state
-state_avg <- aggregate(microbusiness_density ~ state, data = train_df, FUN = mean)
+state_avg <- aggregate(microbusiness_density ~ state, data = merged_df, FUN = mean)
 
 # Load US map data
 us_map <- map_data("state")
@@ -684,7 +733,7 @@ map_data <- merge(us_map, state_avg, by.x = "region", by.y = "state")
 # Create a heatmap of microbusiness density by state
 ggplot(map_data, aes(x = long, y = lat, group = group, fill = microbusiness_density)) +
   geom_polygon() +
-  scale_fill_gradient(low = "white", high = "navyblue") +
+  scale_fill_gradient(low = "white", high = "darkgreen") +
   coord_map() +
   labs(title = "Average Microbusiness Density per State", fill = "Density") +
   theme_void() +
@@ -692,14 +741,34 @@ ggplot(map_data, aes(x = long, y = lat, group = group, fill = microbusiness_dens
 ```
 
 ```{r}
+# Create a grid of box plots
+ggplot(merged_df, aes(x=state, y=microbusiness_density)) +
+  geom_boxplot(colour = "darkblue", outlier.colour = "pink") +
+  scale_y_log10() +
+  labs(x="State", y="Microbusiness Density") +
+  ggtitle("Microbusiness Density by State") +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.3))
+
+```
+
+```{r}
+
+
+
+```
+
+```{r}
 #{r fig.width = 10 ,fig.height = 12, out.width='100%', fig.align='center'}
 # Aggregate microbusiness density by county
 
-#county_avg <- train_df %>%
+#county_avg <- merged_df %>%
 #  group_by(cfips, county) %>%
 #  summarise(microbusiness_density = mean(microbusiness_density))
 
-county_avg <- aggregate(microbusiness_density ~ county + state, data = train_df, FUN = mean)
+county_avg <- aggregate(microbusiness_density ~ county + state, data = merged_df, FUN = mean)
+
+# Get rid of county, city, and parish in the end of county names
 county_avg$county <- gsub(" county", "", county_avg$county)
 county_avg$county <- gsub(" city", "", county_avg$county)
 county_avg$county <- gsub(" parish", "", county_avg$county)
@@ -729,8 +798,356 @@ str(merged_df)
 
 Boxplots are a visualization tool that provide insights into the central tendency and spread of a dataset, as well as identify outliers and skewness. They are useful for detecting anomalies and comparing variable distributions in a dataset, providing valuable insights into data distribution for exploratory data analysis.
 
-```{r fig.height=4, fig.width=3}
-boxplot(merged_df$microbusiness_density, col = "blue", main = "Microbusiness Density")
+```{r}
+ggplot(merged_df, aes(y = microbusiness_density)) +
+#  ggplot(merged_df, aes(x=region, y=microbusiness_density)) +
+  geom_boxplot(colour = "blue") +
+  scale_y_log10() +
+  labs(y="Microbusiness Density") +
+  ggtitle("Microbusiness Density") +
+  theme_classic()
+  
+```
+
+```{r fig.align='center', fig.height=9, fig.width=3}
+# Create a grid of box plots
+par(mfrow=c(3,2))
+p1 <- ggplot(merged_df, aes(x=region, y=median_hh_inc)) +
+  geom_boxplot(outlier.colour = "orange") +
+  scale_y_log10() +
+  labs(x="Region", y="Median Household Income") +
+  ggtitle("Median Household Income by Region") +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+p2 <- ggplot(merged_df, aes(x=region, y=pct_college)) +
+  geom_boxplot(outlier.colour = "orange") +
+  scale_y_log10() +
+  labs(x="Region", y="Percentage with College Education") +
+  ggtitle("Percentage with College Education by Region") +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+p3 <- ggplot(merged_df, aes(x=region, y=pct_foreign_born)) +
+  geom_boxplot(outlier.colour = "orange") +
+  scale_y_log10() +
+  labs(x="Region", y="Percentage of Foreign-born Residents") +
+  ggtitle("Percentage of Foreign-born Residents by Region") +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+p4 <- ggplot(merged_df, aes(x=region, y=pct_it_workers)) +
+  geom_boxplot(outlier.colour = "orange") +
+  scale_y_log10() +
+  labs(x="Region", y="Percentage of IT Workers") +
+  ggtitle("Percentage of IT Workers by Region") +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+p5 <- ggplot(merged_df, aes(x=region, y=pct_bb)) +
+  geom_boxplot(outlier.colour = "orange") +
+  scale_y_log10() +
+  labs(x="Region", y="Percentage of Broadband Access") +
+  ggtitle("Percentage of Broadband Access by Region") +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+
+grid.arrange(p1, p2, p3, p4, p5, nrow = 5)
+
+
+```
+
+```{r fig.align='center', fig.height=9, fig.width=6}
+# Create a grid of box plots
+
+p1 <- ggplot(merged_df, aes(x=state, y=median_hh_inc)) +
+  geom_boxplot(outlier.colour = "orange") +
+  scale_y_log10() +
+  labs(x="State", y="Median Household Income") +
+  ggtitle("Median Household Income by State") +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.3))
+
+p2 <- ggplot(merged_df, aes(x=state, y=pct_college)) +
+  geom_boxplot(outlier.colour = "orange") +
+  scale_y_log10() +
+  labs(x="State", y="Percentage with College Education") +
+  ggtitle("Percentage with College Education by State") +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.3))
+
+p3 <- ggplot(merged_df, aes(x=state, y=pct_foreign_born)) +
+  geom_boxplot(outlier.colour = "orange") +
+  scale_y_log10() +
+  labs(x="State", y="Percentage of Foreign-born Residents") +
+  ggtitle("Percentage of Foreign-born Residents by State") +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.3))
+
+p4 <- ggplot(merged_df, aes(x=state, y=pct_it_workers)) +
+  geom_boxplot(outlier.colour = "orange") +
+  scale_y_log10() +
+  labs(x="State", y="Percentage of IT Workers") +
+  ggtitle("Percentage of IT Workers by State") +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.3))
+
+p5 <- ggplot(merged_df, aes(x=state, y=pct_bb)) +
+  geom_boxplot(outlier.colour = "orange") +
+  scale_y_log10() +
+  labs(x="State", y="Percentage of Broadband Access") +
+  ggtitle("Percentage of Broadband Access by State") +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.3))
+
+grid.arrange(p1, p2, p3, p4, p5, nrow = 5)
+
+
+
+```
+
+```{r fig.width=6, fig.height=18}
+# choropleth map with 5 variables
+# Group merged_df by region and calculate average variables
+avg_variables <- merged_df %>%
+group_by(region) %>%
+summarize(avg_pct_bb = mean(pct_bb),
+avg_pct_college = mean(pct_college),
+avg_pct_foreign_born = mean(pct_foreign_born),
+avg_pct_it_workers = mean(pct_it_workers),
+avg_median_hh_inc = mean(median_hh_inc))
+
+# Create a lookup table for state abbreviations and their corresponding full names
+state_names <- data.frame(state = state.abb, name = tolower(state.name))
+
+# Lowercase region column of region_map
+region_map <- region_map %>%
+mutate(region = tolower(region))
+
+# Merge the average density data with the region_map data
+plot_data <- merge(region_map, avg_variables, by = "region") %>%
+arrange(order)
+
+# Coordinates of the center of regions
+bea_regions <- data.frame(
+group = c("New England", "Mideast", "Great Lakes", "Plains",
+"Southeast", "Southwest", "Rocky Mountain", "Far West"),
+x = c(-71.8, -76.9, -86.6, -98.5, -82.4, -106.4, -111.1, -119.8),
+y = c(42.2, 39, 43.4, 39.8, 32.6, 34.3, 44.4, 38.4)
+)
+
+# Create the plot with a grid of 5 rows and 1 column
+p1 <- ggplot(plot_data, aes(x = long, y = lat, group = group, fill = avg_pct_bb)) +
+geom_polygon(color = "black") +
+  geom_label(data = bea_regions,
+             aes(x = x, y = y, label = group),
+             size = 3, fontface = "bold", 
+             label.padding = unit(0.2, "lines"),
+             label.size = 0.2,
+             fill = "gray75", color = "black") +
+scale_fill_gradient(low = "gray85", high = "darkred") +
+labs(title = "Average Percent of Broadband Access Per Region", fill = "Avg Density") +
+theme_void()
+
+p2 <- ggplot(plot_data, aes(x = long, y = lat, group = group, fill = avg_pct_college)) +
+geom_polygon(color = "black") +
+  geom_label(data = bea_regions,
+             aes(x = x, y = y, label = group),
+             size = 3, fontface = "bold", 
+             label.padding = unit(0.2, "lines"),
+             label.size = 0.2,
+             fill = "gray75", color = "black") +
+scale_fill_gradient(low = "gray85", high = "darkred") +
+labs(title = "Average Percent of College Graduates Per Region", fill = "Avg Percent") +
+theme_void()
+
+p3 <- ggplot(plot_data, aes(x = long, y = lat, group = group, fill = avg_pct_foreign_born)) +
+geom_polygon(color = "black") +
+  geom_label(data = bea_regions,
+             aes(x = x, y = y, label = group),
+             size = 3, fontface = "bold", 
+             label.padding = unit(0.2, "lines"),
+             label.size = 0.2,
+             fill = "gray75", color = "black") +
+scale_fill_gradient(low = "gray85", high = "darkred") +
+labs(title = "Average Percent of Foreign-Born Population Per Region", fill = "Avg Percent") +
+theme_void()
+
+p4 <- ggplot(plot_data, aes(x = long, y = lat, group = group, fill = avg_pct_it_workers)) +
+geom_polygon(color = "black") +
+  geom_label(data = bea_regions,
+             aes(x = x, y = y, label = group),
+             size = 3, fontface = "bold", 
+             label.padding = unit(0.2, "lines"),
+             label.size = 0.2,
+             fill = "gray75", color = "black") +
+scale_fill_gradient(low = "gray85", high = "darkred") +
+labs(title = "Average Percent of IT Workers Per Region", fill = "Avg Percent") +
+theme_void()
+
+p5 <- ggplot(plot_data, aes(x = long, y = lat, group = group, fill = avg_median_hh_inc)) +
+geom_polygon(color = "black") +
+  geom_label(data = bea_regions,
+             aes(x = x, y = y, label = group),
+             size = 3, fontface = "bold", 
+             label.padding = unit(0.2, "lines"),
+             label.size = 0.2,
+             fill = "gray75", color = "black") +
+scale_fill_gradient(low = "gray85", high = "darkred") +
+labs(title = "Average Median Household inc Per Region", fill = "Avg inc") +
+theme_void()
+
+grid.arrange(p1, p2, p3, p4, p5, nrow = 5)
+
+```
+
+```{r fig.width=6, fig.height=8}
+
+state_avg <- aggregate(cbind(pct_bb, pct_college, pct_foreign_born, pct_it_workers, median_hh_inc) ~ state, data = merged_df, FUN = mean)
+
+
+#Load US state map data
+us_map <- map_data("state")
+
+#Merge state_avg with us_map based on region and state
+map_data <- merge(us_map, state_avg, by.x = c("region"), by.y = c("state")) %>%
+arrange(order)
+
+#Create a grid of heatmaps for each variable
+grid_arrange_shared_legend <- function(...) {
+plots <- list(...)
+g <- ggplotGrob(plots[[1]] + theme(legend.position="bottom"))$grobs
+legend <- g[[which(sapply(g, function(x) x$name) == "guide-box")]]
+lheight <- sum(legend$height)
+grid.arrange(
+do.call(arrangeGrob, lapply(plots, function(x)
+x + theme(legend.position="none") + theme(panel.background = element_rect(fill = "gray85", color = NA)))
+),
+bottom = legend,
+ncol = 5,
+heights = rep((unit(1, "npc") - lheight) / length(plots), length(plots))
+)
+}
+
+heatmap_bb <- ggplot(map_data, aes(x = long, y = lat, group = group, fill = pct_bb)) +
+  geom_polygon() +
+  scale_fill_gradient(low = "white", high = "darkgreen") +
+  coord_map() +
+  labs(title = "Percent of Broadband Access per State", fill = "Percent") +
+  theme_void()
+
+heatmap_college <- 
+  ggplot(map_data, aes(x = long, y = lat, group = group, fill = pct_college)) +
+  geom_polygon() +
+  scale_fill_gradient(low = "white", high = "darkgreen") +
+  coord_map() +
+  labs(title = "Percent of Population with College Education per State", fill = "Percent") +
+  theme_void()
+
+heatmap_foreign_born <- 
+  ggplot(map_data, aes(x = long, y = lat, group = group, fill = pct_foreign_born)) +
+  geom_polygon() +
+  scale_fill_gradient(low = "white", high = "darkgreen") +
+  coord_map() +
+  labs(title = "Percent of Foreign-born Population per State", fill = "Percent") +
+  theme_void()
+
+heatmap_it_workers <- 
+  ggplot(map_data, aes(x = long, y = lat, group = group, fill = pct_it_workers)) +
+  geom_polygon() +
+  scale_fill_gradient(low = "white", high = "darkgreen") +
+  coord_map() +
+  labs(title = "Percent of IT Workers per State", fill = "Percent") +
+  theme_void()
+heatmap_inc <- 
+  ggplot(map_data, aes(x = long, y = lat, group = group, fill = median_hh_inc)) +
+  geom_polygon() +
+  scale_fill_gradient(low = "white", high = "darkgreen") +
+  coord_map() +
+  labs(title = "Median Household Income per State", fill = "Dollars") +
+  theme_void()
+
+#Plot the grid of heatmaps
+#grid_arrange_shared_legend(heatmap_bb, heatmap_college, heatmap_foreign_born, heatmap_it_workers, heatmap_inc)
+grid.arrange(heatmap_bb, heatmap_college, heatmap_foreign_born, heatmap_it_workers, heatmap_inc, nrow = 5)
+
+```
+
+```{r fig.width=6, fig.height=8}
+
+county_avg <- aggregate(cbind(pct_bb, pct_college, pct_foreign_born, pct_it_workers, median_hh_inc) ~ county + state, data = merged_df, FUN = mean)
+
+#Get rid of county, city, and parish in the end of county names
+county_avg$county <- gsub(" county", "", county_avg$county)
+county_avg$county <- gsub(" city", "", county_avg$county)
+county_avg$county <- gsub(" parish", "", county_avg$county)
+
+#Load US county map data
+us_map <- map_data("county")
+
+#Merge county_avg with us_map based on region and county
+map_data <- merge(us_map, county_avg, by.x = c("subregion", "region"), by.y = c("county", "state")) %>%
+arrange(order)
+
+#Create a grid of heatmaps for each variable
+grid_arrange_shared_legend <- function(...) {
+plots <- list(...)
+g <- ggplotGrob(plots[[1]] + theme(legend.position="bottom"))$grobs
+legend <- g[[which(sapply(g, function(x) x$name) == "guide-box")]]
+lheight <- sum(legend$height)
+grid.arrange(
+do.call(arrangeGrob, lapply(plots, function(x)
+x + theme(legend.position="none") + theme(panel.background = element_rect(fill = "gray85", color = NA)))
+),
+bottom = legend,
+ncol = 5,
+heights = rep((unit(1, "npc") - lheight) / length(plots), length(plots))
+)
+}
+
+heatmap_bb <- ggplot(map_data, aes(x = long, y = lat, group = group, fill = pct_bb)) +
+  geom_polygon() +
+  scale_fill_gradient(low = "lightblue", high = "navyblue") +
+  coord_map() +
+  labs(title = "Percent of Broadband Access per County", fill = "Percent") +
+  theme_void()
+
+heatmap_college <- 
+  ggplot(map_data, aes(x = long, y = lat, group = group, fill = pct_college)) +
+  geom_polygon() +
+  scale_fill_gradient(low = "lightblue", high = "navyblue") +
+  coord_map() +
+  labs(title = "Percent of Population with College Education per County", fill = "Percent") +
+  theme_void()
+
+heatmap_foreign_born <- 
+  ggplot(map_data, aes(x = long, y = lat, group = group, fill = pct_foreign_born)) +
+  geom_polygon() +
+  scale_fill_gradient(low = "lightblue", high = "navyblue") +
+  coord_map() +
+  labs(title = "Percent of Foreign-born Population per County", fill = "Percent") +
+  theme_void()
+
+heatmap_it_workers <- 
+  ggplot(map_data, aes(x = long, y = lat, group = group, fill = pct_it_workers)) +
+  geom_polygon() +
+  scale_fill_gradient(low = "lightblue", high = "navyblue") +
+  coord_map() +
+  labs(title = "Percent of IT Workers per County", fill = "Percent") +
+  theme_void()
+heatmap_inc <- 
+  ggplot(map_data, aes(x = long, y = lat, group = group, fill = median_hh_inc)) +
+  geom_polygon() +
+  scale_fill_gradient(low = "lightblue", high = "navyblue") +
+  coord_map() +
+  labs(title = "Median Household Income per County", fill = "Dollars") +
+  theme_void()
+
+#Plot the grid of heatmaps
+#grid_arrange_shared_legend(heatmap_bb, heatmap_college, heatmap_foreign_born, heatmap_it_workers, heatmap_inc)
+grid.arrange(heatmap_bb, heatmap_college, heatmap_foreign_born, heatmap_it_workers, heatmap_inc, nrow = 5)
+
 ```
 
 ```{r fig.height=10, fig.width=4}
@@ -739,8 +1156,8 @@ boxplot(merged_df$median_hh_inc, col = "pink", main = "Median Household Income")
 boxplot(merged_df$pct_college, col = "pink", main = "Percentage with College Education")
 boxplot(merged_df$pct_foreign_born, col = "pink", main = "Percentage of Foreign-born Residents")
 boxplot(merged_df$pct_it_workers, col = "pink", main = "Percentage of IT Workers")
-boxplot(merged_df$pct_bb, color = "pink", main = "Percentage of Broadband Access")
-boxplot(merged_df$active, color = "pink", main = "Active Microbusiness Count")
+boxplot(merged_df$pct_bb, col = "pink", main = "Percentage of Broadband Access")
+#boxplot(merged_df$active, col = "pink", main = "Active Microbusiness Count")
 
 ```
 
@@ -748,17 +1165,8 @@ boxplot(merged_df$active, color = "pink", main = "Active Microbusiness Count")
 
 ## 3.8. Outlier Detection
 
-Outlier detection is an important step in data analysis, as outliers can significantly affect the results of statistical analyses. One method for outlier detection is the decision range approach.
-
-The decision range approach involves setting a range of values outside of which any observations are considered outliers. The decision range is determined based on the data distribution and the researcher's judgment. One common approach is to use the interquartile range (IQR) to define the decision range. The IQR is calculated as the difference between the third quartile (Q3) and the first quartile (Q1) of the data.
-
-The decision range is then defined as the range from Q1 - 1.5*IQR to Q3 + 1.5*IQR. Any observations that fall outside of this range are considered outliers. This method is useful for identifying potential outliers in a dataset and can help to ensure that statistical analyses are robust and accurate.
-
-```{r}
-quartiles <- quantile(merged_df$microbusiness_density, probs = seq(0, 1, 0.25), na.rm = FALSE,
-         names = TRUE, type = 7, digits = 6)
-quartiles
-```
+Outlier detection is an important step in data analysis, as outliers can significantly affect the results of statistical analyses. There are several methods to detect outliers depending on the distribution of the data.
+We will now check our data distribution:
 
 ```{r fig.width=12, fig.height=4}
 # Calculate the mean and standard deviation of 'microbusiness_density'
@@ -777,13 +1185,14 @@ density_df <- data.frame(x = x_values, y = y_values)
 # Create a boxplot using the 'ggplot' function from 'ggplot2' package
 boxplot <- ggplot(data = merged_df, aes(x = "", y = merged_df$microbusiness_density)) +
   geom_boxplot(fill = "skyblue") +
-  labs(x = "", y = "Microbusiness Density") +
+  scale_y_log10() +
+  labs(x = "", y = "Microbusiness Density (logarithmic)") +
   ggtitle("Boxplot for Microbusiness Density")
 
 # Create a Q-Q plot using the 'ggplot' function from 'ggplot2' package and add a diagonal line using the 'geom_abline' function
-qqplot <- ggplot(data = density_df, aes(sample = x)) +
-  geom_qq() +
-  geom_abline(intercept = 0, slope = 1, colour = "red") +
+qqplot <- ggplot(data = merged_df, aes(sample = microbusiness_density)) + 
+  stat_qq() + 
+  stat_qq_line(colour = "red") +
   labs(x = "Theoretical Normal Quantiles", y = "Observed Quantiles") +
   ggtitle("Q-Q Plot for Microbusiness Density")
 
@@ -798,36 +1207,327 @@ densityplot <- ggplot(data = merged_df, aes(x = microbusiness_density)) +
 grid.arrange(densityplot, boxplot, qqplot, ncol = 3, widths = c(2, 1, 2))
 
 ```
+```{r}
+# Sample 5000 observations from microbusiness_density column
+set.seed(123) # Set seed for reproducibility
+sample_data <- sample(merged_df$microbusiness_density, 5000)
+
+# Perform Shapiro-Wilk test on sample_data
+shapiro.test(sample_data)
+
+```
+The above distribution plot explains that the dataset is right-skewed. The boxplot shows some data points away from the upper whisker; hence outliers are present in `microbusiness_density`. Q-Q plot's alignment is away from the 45-degree angle depicting outliers in the dataset. If the data were normally-distributed, using an approach such as the Z-score method to detect outliers was generally more appropriate. Since the data is right-skewed and not normally distributed, a common approach to detecting outliers is to use the interquartile range (IQR) method. Now, we have to find the boundary of minimum and maximum values, out of which data would be considered an outlier.
+
+The decision range approach involves setting a range of values outside of which any observations are considered outliers. The decision range is determined based on the data distribution and the researcher's judgment. One common approach is to use the interquartile range (IQR) to define the decision range. The IQR is calculated as the difference between the third quartile (Q3) and the first quartile (Q1) of the data.
+
+The decision range is then defined as the range from $Q1 - 1.5 * IQR$ to $Q3 + 1.5 * IQR$. Any observations that fall outside of this range are considered outliers. This method is useful for identifying potential outliers in a dataset and can help to ensure that statistical analyses are robust and accurate.
 
 ```{r}
+quartiles <- quantile(merged_df$microbusiness_density, probs = seq(0, 1, 0.25), na.rm = FALSE,
+         names = TRUE, type = 7, digits = 6)
+quartiles
+```
 
-par(mfrow=c(1,3)) # set plot layout to 3 rows and 2 columns
-mean_density <- mean(merged_df$microbusiness_density)
-sd_density <- sd(merged_df$microbusiness_density)
+
+
+```{r}
+# Calculate IQR of microbusiness_density column
+q <- quantile(merged_df$microbusiness_density, c(0.25, 0.75))
+iqr <- q[2] - q[1]
+
+# Calculate lower and upper bounds for outliers
+lower_bound <- q[1] - 1.5*iqr
+upper_bound <- q[2] + 1.5*iqr
+
+# Count number of outliers
+num_outliers <- sum(merged_df$microbusiness_density < lower_bound | merged_df$microbusiness_density > upper_bound)
+
+# Calculate percent of outliers
+percent_outliers <- num_outliers / length(merged_df$microbusiness_density) * 100
+
+# Print results
+cat("Number of outliers:", num_outliers, "\n")
+cat("Percent of outliers:", percent_outliers, "%\n")
+```
+
+```{r}
+# Create new dataframe without outliers
+merged_df_new <- merged_df[merged_df$microbusiness_density >= lower_bound & merged_df$microbusiness_density <= upper_bound,]
+
+# Print number of rows removed
+cat("Number of rows removed:", nrow(merged_df) - nrow(merged_df_new), "\n")
+
+```
+
+```{r fig.width=12, fig.height=4}
+# Calculate the mean and standard deviation of 'microbusiness_density'
+mean_density <- mean(merged_df_new$microbusiness_density)
+sd_density <- sd(merged_df_new$microbusiness_density)
+
+# Create a range of values for the x-axis
 x_values <- seq(mean_density - 3*sd_density, mean_density + 3*sd_density, length.out = 1000)
+
+# Create a bell curve using the 'dnorm' function with mean and standard deviation calculated above
 y_values <- dnorm(x_values, mean = mean_density, sd = sd_density)
+
+# Combine the 'x_values' and 'y_values' into a data frame using the 'data.frame' function
 density_df <- data.frame(x = x_values, y = y_values)
-ggplot(merged_df, aes(x = microbusiness_density)) +
-  geom_histogram(aes(y = ..density..), bins = 30, colour = "black", fill = "lightblue") +
-  geom_line(data = density_df, aes(x = x, y = y), colour = "navy", linewidth = 1) +
-  labs(x = "Microbusiness Density", y = "Density") +
-  ggtitle("Distribution of Microbusiness Density") +
-  theme_minimal()
 
-theoretical_norm <- qnorm(p = seq(0, 1, length.out = length(merged_df$microbusiness_density)), mean = mean(merged_df$microbusiness_density), sd = sd(merged_df$microbusiness_density))
-density_df <- data.frame(observed = sort(merged_df$microbusiness_density), theoretical = theoretical_norm)
-ggplot(density_df, aes(x = theoretical, y = observed)) +
-  geom_point() +
-  geom_abline(intercept = 0, slope = 1, colour = "red") +
-  labs(x = "Theoretical Normal Quantiles", y = "Observed Quantiles") +
-  ggtitle("Q-Q Plot for Microbusiness Density")
-
-ggplot(data = merged_df, aes(x = "", y = microbusiness_density)) +
+# Create a boxplot using the 'ggplot' function from 'ggplot2' package
+boxplot <- ggplot(data = merged_df_new, aes(x = "", y = merged_df_new$microbusiness_density)) +
   geom_boxplot(fill = "skyblue") +
+#  scale_y_log10() +
   labs(x = "", y = "Microbusiness Density") +
   ggtitle("Boxplot for Microbusiness Density")
 
+# Create a Q-Q plot using the 'ggplot' function from 'ggplot2' package and add a diagonal line using the 'geom_abline' function
+qqplot <- ggplot(data = merged_df_new, aes(sample = microbusiness_density)) + 
+  stat_qq() + 
+  stat_qq_line(colour = "red") +
+  labs(x = "Theoretical Normal Quantiles", y = "Observed Quantiles") +
+  ggtitle("Q-Q Plot for Microbusiness Density")
+
+#  ggplot(data = density_df, aes(sample = x)) +
+#  geom_qq() +
+#  geom_abline(intercept = 0, slope = 1, colour = "red") +
+#  labs(x = "Theoretical Normal Quantiles", y = "Observed Quantiles") +
+#  ggtitle("Q-Q Plot for Microbusiness Density")
+
+
+
+# Create a bell curve using the 'ggplot' function from 'ggplot2' package and add the bell curve using the 'geom_line' function
+densityplot <- ggplot(data = merged_df_new, aes(x = microbusiness_density)) +
+  geom_histogram(aes(y = after_stat(density)), bins = 30, colour = "black", fill = "white") +
+  geom_line(data = density_df, aes(x = x, y = y), colour = "red", linewidth = 1) +
+  labs(x = "Microbusiness Density", y = "Density") +
+  ggtitle("Distribution of Microbusiness Density")
+
+# Arrange the plots in one row using the 'grid.arrange' function from the 'gridExtra' package
+grid.arrange(densityplot, boxplot, qqplot, ncol = 3, widths = c(2, 1, 2))
+
 ```
+
+
+```{r}
+# Calculate IQR of microbusiness_density column
+q <- quantile(merged_df_new$microbusiness_density, c(0.25, 0.75))
+iqr <- q[2] - q[1]
+
+# Calculate lower and upper bounds for outliers
+lower_bound <- q[1] - 1.5*iqr
+upper_bound <- q[2] + 1.5*iqr
+
+# Count number of outliers
+num_outliers <- sum(merged_df_new$microbusiness_density < lower_bound | merged_df_new$microbusiness_density > upper_bound)
+
+# Calculate percent of outliers
+percent_outliers <- num_outliers / length(merged_df_new$microbusiness_density) * 100
+
+# Print results
+cat("Number of outliers:", num_outliers, "\n")
+cat("Percent of outliers:", percent_outliers, "%\n")
+```
+
+```{r}
+# Create new dataframe without outliers
+merged_df_clean <- merged_df_new[merged_df_new$microbusiness_density >= lower_bound & merged_df_new$microbusiness_density <= upper_bound,]
+
+# Print number of rows removed
+cat("Number of rows removed:", nrow(merged_df_new) - nrow(merged_df_clean), "\n")
+
+```
+
+```{r fig.width=12, fig.height=4}
+# Calculate the mean and standard deviation of 'microbusiness_density'
+mean_density <- mean(merged_df_clean$microbusiness_density)
+sd_density <- sd(merged_df_clean$microbusiness_density)
+
+# Create a range of values for the x-axis
+x_values <- seq(mean_density - 3*sd_density, mean_density + 3*sd_density, length.out = 1000)
+
+# Create a bell curve using the 'dnorm' function with mean and standard deviation calculated above
+y_values <- dnorm(x_values, mean = mean_density, sd = sd_density)
+
+# Combine the 'x_values' and 'y_values' into a data frame using the 'data.frame' function
+density_df <- data.frame(x = x_values, y = y_values)
+
+# Create a boxplot using the 'ggplot' function from 'ggplot2' package
+boxplot <- ggplot(data = merged_df_clean, aes(x = "", y = merged_df_clean$microbusiness_density)) +
+  geom_boxplot(fill = "skyblue") +
+#  scale_y_log10() +
+  labs(x = "", y = "Microbusiness Density") +
+  ggtitle("Boxplot for Microbusiness Density")
+
+# Create a Q-Q plot using the 'ggplot' function from 'ggplot2' package and add a diagonal line using the 'geom_abline' function
+qqplot <- ggplot(data = merged_df_clean, aes(sample = microbusiness_density)) + 
+  stat_qq() + 
+  stat_qq_line(colour = "red") +
+  labs(x = "Theoretical Normal Quantiles", y = "Observed Quantiles") +
+  ggtitle("Q-Q Plot for Microbusiness Density")
+
+#  ggplot(data = density_df, aes(sample = x)) +
+#  geom_qq() +
+#  geom_abline(intercept = 0, slope = 1, colour = "red") +
+#  labs(x = "Theoretical Normal Quantiles", y = "Observed Quantiles") +
+#  ggtitle("Q-Q Plot for Microbusiness Density")
+
+
+
+# Create a bell curve using the 'ggplot' function from 'ggplot2' package and add the bell curve using the 'geom_line' function
+densityplot <- ggplot(data = merged_df_clean, aes(x = microbusiness_density)) +
+  geom_histogram(aes(y = after_stat(density)), bins = 30, colour = "black", fill = "white") +
+  geom_line(data = density_df, aes(x = x, y = y), colour = "red", linewidth = 1) +
+  labs(x = "Microbusiness Density", y = "Density") +
+  ggtitle("Distribution of Microbusiness Density")
+
+# Arrange the plots in one row using the 'grid.arrange' function from the 'gridExtra' package
+grid.arrange(densityplot, boxplot, qqplot, ncol = 3, widths = c(2, 1, 2))
+
+```
+
+
+```{r fig.width=12, fig.height=4}
+# Calculate the mean and standard deviation of 'pct_bb'
+mean_pct_bb <- mean(merged_df$pct_bb)
+sd_pct_bb <- sd(merged_df$pct_bb)
+
+# Create a range of values for the x-axis
+x_values <- seq(mean_pct_bb - 3*sd_pct_bb, mean_pct_bb + 3*sd_pct_bb, length.out = 1000)
+
+# Create a bell curve using the 'dnorm' function with mean and standard deviation calculated above
+y_values <- dnorm(x_values, mean = mean_pct_bb, sd = sd_pct_bb)
+
+# Combine the 'x_values' and 'y_values' into a data frame using the 'data.frame' function
+pct_bb_df <- data.frame(x = x_values, y = y_values)
+
+# Create a boxplot using the 'ggplot' function from 'ggplot2' package
+boxplot <- ggplot(data = merged_df, aes(x = "", y = merged_df$pct_bb)) +
+  geom_boxplot(fill = "skyblue") +
+  scale_y_log10() +
+  labs(x = "", y = "Microbusiness pct_bb (logarithmic)") +
+  ggtitle("Boxplot for Microbusiness pct_bb")
+
+# Create a Q-Q plot using the 'ggplot' function from 'ggplot2' package and add a diagonal line using the 'geom_abline' function
+qqplot <- ggplot(data = merged_df, aes(sample = pct_bb)) + 
+  stat_qq() + 
+  stat_qq_line(colour = "red") +
+  labs(x = "Theoretical Normal Quantiles", y = "Observed Quantiles") +
+  ggtitle("Q-Q Plot for Microbusiness pct_bb")
+
+# Create a bell curve using the 'ggplot' function from 'ggplot2' package and add the bell curve using the 'geom_line' function
+densityplot <- ggplot(data = merged_df, aes(x = pct_bb)) +
+  geom_histogram(aes(y = after_stat(density)), bins = 30, colour = "black", fill = "white") +
+  geom_line(data = pct_bb_df, aes(x = x, y = y), colour = "red", linewidth = 1) +
+  labs(x = "Microbusiness pct_bb", y = "pct_bb") +
+  ggtitle("Distribution of Microbusiness pct_bb")
+
+# Arrange the plots in one row using the 'grid.arrange' function from the 'gridExtra' package
+grid.arrange(densityplot, boxplot, qqplot, ncol = 3, widths = c(2, 1, 2))
+
+```
+```{r}
+# Calculate IQR of pct_bb column
+q <- quantile(merged_df_new$pct_bb, c(0.25, 0.75))
+iqr <- q[2] - q[1]
+
+# Calculate lower and upper bounds for outliers
+lower_bound <- q[1] - 1.5*iqr
+upper_bound <- q[2] + 1.5*iqr
+
+# Count number of outliers
+num_outliers <- sum(merged_df_new$pct_bb < lower_bound | merged_df_new$pct_bb > upper_bound)
+
+# Calculate percent of outliers
+percent_outliers <- num_outliers / length(merged_df_new$pct_bb) * 100
+
+# Print results
+cat("Number of outliers:", num_outliers, "\n")
+cat("Percent of outliers:", percent_outliers, "%\n")
+
+
+```
+
+```{r}
+# Specify the columns to analyze
+cols_to_analyze <- c("pct_bb", "pct_college", "pct_it_workers", "pct_foreign_born", "median_hh_inc")
+
+# Loop through each column and detect outliers using the IQR method
+for (col in cols_to_analyze) {
+  # Calculate the interquartile range (IQR) of the column
+  q1 <- quantile(merged_df_new[[col]], 0.25)
+  q3 <- quantile(merged_df_new[[col]], 0.75)
+  iqr <- q3 - q1
+  
+  # Calculate the upper and lower bounds for outliers
+  upper_bound <- q3 + (1.5 * iqr)
+  lower_bound <- q1 - (1.5 * iqr)
+  
+  # Identify the outliers in the column
+  outliers <- merged_df_new[[col]][merged_df_new[[col]] > upper_bound | merged_df_new[[col]] < lower_bound]
+  
+  # Print the results
+#  cat(paste("Outliers in", col, ":", toString(outliers), "\n"))
+  # Count number of outliers
+  num_outliers <- sum(merged_df_new[[col]] < lower_bound | merged_df_new[[col]] > upper_bound)
+  # Calculate percent of outliers
+  percent_outliers <- num_outliers / length(merged_df_new[[col]]) * 100
+
+# Print results
+cat("Number of outliers:", num_outliers, "\n")
+cat("Percent of outliers:", percent_outliers, "%\n")
+}
+
+```
+```{r}
+# Specify a list of column pairs to compare
+col_pairs <- list(c("microbusiness_density", "pct_bb"), c("microbusiness_density", "pct_college"), c("microbusiness_density", "pct_foreign_born"), c("microbusiness_density", "pct_it_workers"), c("microbusiness_density", "median_hh_inc"))
+
+# Loop through each column pair and perform the Wilcoxon signed-rank test
+for (pair in col_pairs) {
+  test_result <- wilcox.test(merged_df_new[[pair[1]]], merged_df_new[[pair[2]]], paired = TRUE)
+  cat(paste("Wilcoxon signed-rank test results for", pair[1], "and", pair[2], ":\n"))
+  print(test_result)
+  cat("\n")
+}
+
+
+```
+
+```{r}
+# Specify a list of column pairs to compare
+col_pairs <- list(c("microbusiness_density", "pct_bb"), c("microbusiness_density", "pct_college"), c("microbusiness_density", "pct_foreign_born"), c("microbusiness_density", "pct_it_workers"), c("microbusiness_density", "median_hh_inc"))
+
+# Loop through each column pair and perform the Wilcoxon signed-rank test
+for (pair in col_pairs) {
+  test_result <- wilcox.test(merged_df_new[[pair[1]]], merged_df_new[[pair[2]]], paired = FALSE)
+  cat(paste("Wilcoxon rank-sum test results for", pair[1], "and", pair[2], ":\n"))
+  print(test_result)
+  cat("\n")
+}
+
+
+```
+The results show that for each pair of columns, the p-value is less than the significance level of 0.05, which means that we reject the null hypothesis that the median difference between the two columns is zero. Instead, we conclude that there is a statistically significant difference between the two columns.
+
+The results suggest that there is evidence to support the hypothesis that the population median of each column is different from the population median of microbusiness_density.
+
+```{r}
+
+# Perform Kruskal-Wallis test on multiple variables
+kwtest_college <- kruskal.test(pct_college ~ region, data = merged_df)
+kwtest_foreign_born <- kruskal.test(pct_foreign_born ~ region, data = merged_df)
+kwtest_median_hh_inc <- kruskal.test(median_hh_inc ~ region, data = merged_df)
+
+# Print the test results
+print(kwtest_college)
+print(kwtest_foreign_born)
+print(kwtest_median_hh_inc)
+
+```
+In all three cases, the p-value is reported to be less than 2.2e-16, which is smaller than the typical significance level of 0.05. Therefore, we can conclude that there is strong evidence to suggest that the medians of the different regions for each variable are not equal.
+
+
+
 
 ```{r}
 # draft (this is a test plot)
@@ -960,7 +1660,6 @@ ggplot(imputed_data_long, aes(x=cfips, y=year, fill=pct_bb)) +
 
 ```
 
-```{r}
+# Add boxplots to a scatterplot
 
-
-```
+par(fig=c(0,0.8,0,0.8), new=TRUE) plot(mtcars$wt, mtcars$mpg, xlab="Car Weight", ylab="Miles Per Gallon") par(fig=c(0,0.8,0.55,1), new=TRUE) boxplot(mtcars$wt, horizontal=TRUE, axes=FALSE) par(fig=c(0.65,1,0,0.8),new=TRUE) boxplot(mtcars$mpg, axes=FALSE) mtext("Enhanced Scatterplot", side=3, outer=TRUE, line=-3)
