@@ -96,26 +96,40 @@ setwd("/Users/dreamer/Downloads/Godaddy/godaddy_microbusiness_forecasting")
 
 ```{r message = FALSE}
 # Importing the libraries
+
+# Recognize package conflicts
+library(conflicted)
+
+# Multi-purpose package for data import, tidying, manipulation, visualisation, and programming
+# Most common packages include: ggplot2, purrr, tibble, dplyr, tidyr, stringr, readr, forcats
 library(tidyverse)
-# ggplot2, purrr, tibble, dplyr, tidyr, stringr, readr, forcats
+
+# Deal with missing data
 library(mice)
+
+# Related to plots
 library(maps)
+#library(ggmap)
 library(gridExtra)
+library(mapdata)
+library(ggcorrplot)
+library(corrplot)
+
+# Training
 library(caret)
 library(gbm)
-#library(png)
-#library(ggmap)
+
+# Color palette
 library(viridis)
-library(mapdata)
-library(corrplot)
-library(reshape2)
+
+# Future Selection 
+#library(KernSmooth)
+library(glmnet)
+library(randomForest)
 
 # libraries required for calculating SMAPE
-#library(forecast)
+library(forecast)
 library(Metrics)
-#actual <- c(10, 20, 30, 40, 50)
-#forecasted <- c(20, 20, 10, 40, 60)
-#smape(actual, forecasted)
 ```
 
 # 3. Exploratory Data Analysis
@@ -157,22 +171,31 @@ tail(census_df)
 ```{r}
 # Display information about the train dataframe
 str(train_df)
-cat(rep("=", 40), "\n") # Print a line of 40 equal signs
+#cat(rep("=", 40), "\n") # Print a line of 40 equal signs
 summary(train_df)
 ```
 
 ```{r}
 # Display information about the test dataframe
 str(test_df)
-cat(rep("=", 40), "\n") # Print a line of 40 equal signs
+#cat(rep("=", 40), "\n") # Print a line of 40 equal signs
 summary(test_df)
 ```
 
 ```{r}
 # Display information about the census dataframe
 str(census_df)
-cat(rep("=", 40), "\n") # Print a line of 40 equal signs
+#cat(rep("=", 40), "\n") # Print a line of 40 equal signs
 summary(census_df)
+```
+
+The data type of `first_day_of_month` column in **train_df** and **test_df** is *character*. We will convert the character to *Date* format.
+
+```{r}
+# Change first_day_of_month data type to Date
+train_df$first_day_of_month <- as.Date(train_df$first_day_of_month)
+test_df$first_day_of_month <- as.Date(test_df$first_day_of_month)
+str(train_df$first_day_of_month)
 ```
 
 ## 3.2. Checking the Dataframes for Missing Values
@@ -292,7 +315,7 @@ To make analysis easier and be able to group the data by year and month, we will
 train_df$year <- as.integer(substr(train_df$first_day_of_month, 1, 4))
 train_df$month <- as.integer(substr(train_df$first_day_of_month, 6, 7))
 train_df$year_month <- substr(train_df$first_day_of_month, 1, 7)
-
+str(train_df)
 # Add year, month and year_month columns to test_df
 test_df$year <- as.integer(substr(test_df$first_day_of_month, 1, 4))
 test_df$month <- as.integer(substr(test_df$first_day_of_month, 6, 7))
@@ -326,12 +349,32 @@ for (var in vars) {
     arrange(cfips, row_id) 
 }
 merged_df <- merged_df %>%
-  select(row_id, cfips, county, state, first_day_of_month, microbusiness_density, active, year_month, year, month, pct_bb, pct_college, pct_foreign_born, pct_it_workers, median_hh_inc) 
+  select(row_id, cfips, county, state, first_day_of_month, microbusiness_density, active, year_month, year, month, pct_bb, pct_college, pct_foreign_born, pct_it_workers, median_hh_inc)
+
+merged_test <- test_df
+for (var in vars) {
+  # Select columns and pivot longer
+  merged_test <- imputed_data %>%
+    select(cfips, paste0(var, "_2020"):paste0(var, "_2021")) %>%
+    pivot_longer(cols = starts_with(var),
+                 names_to = "year",
+                 values_to = var) %>%
+    # Modify year and month columns
+    mutate(year = as.integer(str_sub(year, -4)) + 2) %>%
+    uncount(12, .id = "month") %>%
+    mutate(month = month) %>%
+    # Merge with merged_df
+    merge(merged_test, by = c("cfips", "year", "month"), all.x = TRUE) %>%
+    arrange(cfips, row_id) 
+}
+merged_test <- merged_test %>%
+  select(row_id, cfips, first_day_of_month, year_month, year, month, pct_bb, pct_college, pct_foreign_born, pct_it_workers, median_hh_inc)
   
 ```
 
 ```{r}
 colSums(is.na(merged_df))
+colSums(is.na(merged_test))
 ```
 
 Since the data from 1/2019 to 7/2019 and 11/2022 to 12/2022 is not available in **train_df** merging the data has created NA values in **merged_df** for those months. Now we have to remove the rows with missing values.
@@ -340,10 +383,14 @@ Since the data from 1/2019 to 7/2019 and 11/2022 to 12/2022 is not available in 
 # remove NA values created in merged_df
 merged_df <- merged_df %>%
   na.omit(merged_df)
+
+merged_test <- merged_test %>%
+  na.omit(merged_test)
 ```
 
 ```{r}
 colSums(is.na(merged_df))
+colSums(is.na(merged_test))
 ```
 
 ```{r}
@@ -354,7 +401,7 @@ summary(merged_df)
 
 The main feature in this project is `microbusiness_density` provided in the **merged_df.** Also, the number of active microbusinesses is provided in the `active` column.
 
-### 3.7.1. Using Time Variables
+### 3.7.1. Overall Microbusiness Density and Count
 
 First, we will plot overall microbusiness density and count of active microbusiness in the United States:
 
@@ -389,6 +436,35 @@ grid.arrange(p1, p2, nrow = 2)
 ```
 
 As expected, these two graphs show almost similar behavior. If we ignore the slight fluctuations of the two graphs, the general microbusiness density and count are growing over the whole time frame.
+
+```{r fig.height=4}
+# Create plots
+p1 <- merged_df %>%
+  # Group merged_df by year_month
+  group_by(year_month) %>%
+  # calculate the median value of microbusiness_density for each group
+  summarise(median_microbusiness_density = median(microbusiness_density)) %>%
+  ggplot(aes(x = year_month, y = median_microbusiness_density, group = 1)) +
+  geom_line() +
+  labs(title = "Overall Microbusiness Density Median",
+       x = "Year-Month",
+       y = "Microbusiness Density Median") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+p2 <- merged_df %>%
+  group_by(year_month) %>%
+  summarize(median_active = median(active)) %>%
+  ggplot(aes(x = year_month, y = median_active)) +
+  geom_line(group = 1) +
+  labs(title = "Overall Active Microbusiness Count Median",
+       x = "Year-Month", 
+       y = "Active Median") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+
+# Display the plots
+grid.arrange(p1, p2, nrow = 2)
+```
 
 Then, we will examine the behavior of these two variables (*microbusiness density* and *active*) while grouping the data by month and year:
 
@@ -468,7 +544,7 @@ ggplot(merged_df, aes(x=year_month, y=microbusiness_density)) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 ```
 
-### 3.7.2. Using Geographical Measures
+### 3.7.2. Economic Regional Divisions
 
 The Bureau of Economic Analysis (BEA) divides the United States into eight distinct economic regions[^1].
 
@@ -683,7 +759,7 @@ ggplot(plot_data, aes(x = long, y = lat, group = group, fill = avg_density)) +
 #  theme(panel.background = element_rect(fill = "gray90", color = NA))
 ```
 
-Although, we can only see only one parameter on a bar plot. To have a better look on the distribution, central tendency, spread, and variability of the `microbusiness_density` variable, we can use boxplots.
+Although, we can only see only one parameter on above map. To have a better look on the distribution, central tendency, spread, and variability of the `microbusiness_density` variable, we can use boxplots.
 
 ```{r}
 
@@ -711,12 +787,22 @@ ggplot(merged_df, aes(x=region, y=microbusiness_density)) +
 
 ```
 
-These boxplots are more informative, because using a logarithmic scale on the Y-axis helps to better reveal the differences and similarities between regions that helps to highlight any potential patterns or trends in the data. Some of the points that can be inferred from this boxplot include:\
-- all regions have at least some microbusiness activity. Because minimum microbusiness density is greater than 0 in all regions - The median microbusiness density is highest in the Rocky Mountain region, followed by the Far West and the Mideast regions. - The 3rd quartile microbusiness density is highest in the Far West region, followed by the Rocky Mountain and the Mideast regions. - The maximum microbusiness density is highest in the Plains region, followed by the Far West and the Rocky Mountain regions. - The mean microbusiness density is highest in the Far West region, followed by the Rocky Mountain and the Mideast regions. - The interquartile range (IQR = the difference between the 1st and 3rd quartiles) of microbusiness density is widest in the Plains region, indicating that there is a greater range of microbusiness density in that region. In contrast, the IQR is narrowest in the Southeast region.
+These boxplots are more informative, because using a logarithmic scale on the Y-axis helps to better reveal the differences and similarities between regions that helps to highlight any potential patterns or trends in the data. Some of the points that can be inferred from this boxplot include:
+
+-   All regions have at least some microbusiness activity. Because minimum microbusiness density is greater than 0 in all regions.
+
+-   The median microbusiness density is highest in the *New England* region, followed by the *Far West* and the *Mideast* regions.
+
+-   The 3rd quartile microbusiness density is highest in the *Rocky Mountain* region, followed by the *New England* and the *Far West* regions.
+
+-   The maximum microbusiness density is highest in the *Plains* region, followed by the *Rocky Mountain* and the *Far West* regions.
+
+-   The mean microbusiness density is highest in the *New England* region, followed by the *Far West* and the *Rocky Mountain* regions.
+
+-   The interquartile range (IQR = the difference between the 1st and 3rd quartiles) of microbusiness density is widest in the *Rocky Mountain* region, indicating that there is a greater range of microbusiness density in that region. In contrast, the IQR is narrowest in the *Plains* region.
 
 ```{r}
-
-by(merged_df$microbusiness_density, merged_df$region, summary)
+# by(merged_df$microbusiness_density, merged_df$region, summary)
 
 ```
 
@@ -753,13 +839,7 @@ ggplot(merged_df, aes(x=state, y=microbusiness_density)) +
 ```
 
 ```{r}
-
-
-
-```
-
-```{r}
-#{r fig.width = 10 ,fig.height = 12, out.width='100%', fig.align='center'}
+# {r fig.width = 10 ,fig.height = 12, out.width='100%', fig.align='center'}
 # Aggregate microbusiness density by county
 
 #county_avg <- merged_df %>%
@@ -1166,7 +1246,22 @@ boxplot(merged_df$pct_bb, col = "pink", main = "Percentage of Broadband Access")
 ## 3.8. Outlier Detection
 
 Outlier detection is an important step in data analysis, as outliers can significantly affect the results of statistical analyses. There are several methods to detect outliers depending on the distribution of the data.
-We will now check our data distribution:
+
+The Shapiro-Wilk normality test is a statistical test used to determine if a given dataset follows a normal distribution. We will perform a Shapiro-Wilk normality test on a random sample of 5000 observations from the `microbusiness_density` column of **merged_df** dataframe. To run this test we first set the seed value using **`set.seed()`** function to a specific random seed to ensure that the results are reproducible if the code is run again. Then, we weill use the **`shapiro.test()`** function to perform the Shapiro-Wilk normality test on the **sample_data** object. The function returns the test statistic (W) and the p-value. A W value closer to 1 indicates that the data is more normally distributed, while a W value closer to 0 indicates greater deviation from normality. If the p-value is less than the significance level (typically 0.05), then the null hypothesis (that the sample data is normally distributed) is rejected in favor of the alternative hypothesis (that the sample data is not normally distributed).
+
+```{r}
+# Sample 5000 observations from microbusiness_density column
+set.seed(92) # Set seed for reproducibility
+sample_data <- sample(merged_df$microbusiness_density, 5000)
+
+# Perform Shapiro-Wilk test on sample_data
+shapiro.test(sample_data)
+
+```
+
+The test resulted in a W statistic of 0.55179 and a p-value of less than 2.2e-16. Based on the results of the Shapiro-Wilk normality test, it can be concluded that the **sample_data** is not normally distributed.
+
+To have a better visual on distribution of the data we will use a bell curve, a boxplot, and a Q-Q plot on `microbusiness_density`.
 
 ```{r fig.width=12, fig.height=4}
 # Calculate the mean and standard deviation of 'microbusiness_density'
@@ -1176,27 +1271,27 @@ sd_density <- sd(merged_df$microbusiness_density)
 # Create a range of values for the x-axis
 x_values <- seq(mean_density - 3*sd_density, mean_density + 3*sd_density, length.out = 1000)
 
-# Create a bell curve using the 'dnorm' function with mean and standard deviation calculated above
+# Create a bell curve with mean and standard deviation calculated above
 y_values <- dnorm(x_values, mean = mean_density, sd = sd_density)
 
-# Combine the 'x_values' and 'y_values' into a data frame using the 'data.frame' function
+# Combine the 'x_values' and 'y_values' into a data frame
 density_df <- data.frame(x = x_values, y = y_values)
 
-# Create a boxplot using the 'ggplot' function from 'ggplot2' package
+# Create a boxplot 
 boxplot <- ggplot(data = merged_df, aes(x = "", y = merged_df$microbusiness_density)) +
   geom_boxplot(fill = "skyblue") +
   scale_y_log10() +
   labs(x = "", y = "Microbusiness Density (logarithmic)") +
   ggtitle("Boxplot for Microbusiness Density")
 
-# Create a Q-Q plot using the 'ggplot' function from 'ggplot2' package and add a diagonal line using the 'geom_abline' function
+# Create a Q-Q plot and add a diagonal line
 qqplot <- ggplot(data = merged_df, aes(sample = microbusiness_density)) + 
   stat_qq() + 
   stat_qq_line(colour = "red") +
   labs(x = "Theoretical Normal Quantiles", y = "Observed Quantiles") +
   ggtitle("Q-Q Plot for Microbusiness Density")
 
-# Create a bell curve using the 'ggplot' function from 'ggplot2' package and add the bell curve using the 'geom_line' function
+# Create a histogram and add the bell curve
 densityplot <- ggplot(data = merged_df, aes(x = microbusiness_density)) +
   geom_histogram(aes(y = after_stat(density)), bins = 30, colour = "black", fill = "white") +
   geom_line(data = density_df, aes(x = x, y = y), colour = "red", linewidth = 1) +
@@ -1207,18 +1302,12 @@ densityplot <- ggplot(data = merged_df, aes(x = microbusiness_density)) +
 grid.arrange(densityplot, boxplot, qqplot, ncol = 3, widths = c(2, 1, 2))
 
 ```
-```{r}
-# Sample 5000 observations from microbusiness_density column
-set.seed(123) # Set seed for reproducibility
-sample_data <- sample(merged_df$microbusiness_density, 5000)
 
-# Perform Shapiro-Wilk test on sample_data
-shapiro.test(sample_data)
+The above distribution plot explains that the dataset is right-skewed. The boxplot shows some data points away from the upper whisker; hence outliers are present in `microbusiness_density`. Q-Q plot's alignment is away from the 45-degree angle depicting outliers in the dataset.
 
-```
-The above distribution plot explains that the dataset is right-skewed. The boxplot shows some data points away from the upper whisker; hence outliers are present in `microbusiness_density`. Q-Q plot's alignment is away from the 45-degree angle depicting outliers in the dataset. If the data were normally-distributed, using an approach such as the Z-score method to detect outliers was generally more appropriate. Since the data is right-skewed and not normally distributed, a common approach to detecting outliers is to use the interquartile range (IQR) method. Now, we have to find the boundary of minimum and maximum values, out of which data would be considered an outlier.
+Since the data is right-skewed and not normally distributed, a common approach to detecting outliers is to use the interquartile range (IQR) method. Now, we have to find the boundary of minimum and maximum values, out of which data would be considered an outlier.
 
-The decision range approach involves setting a range of values outside of which any observations are considered outliers. The decision range is determined based on the data distribution and the researcher's judgment. One common approach is to use the interquartile range (IQR) to define the decision range. The IQR is calculated as the difference between the third quartile (Q3) and the first quartile (Q1) of the data.
+The decision range approach involves setting a range of values outside of which any observations are considered outliers. One common approach is to use the interquartile range (IQR) to define the decision range. The IQR is calculated as the difference between the third quartile (Q3) and the first quartile (Q1) of the data.
 
 The decision range is then defined as the range from $Q1 - 1.5 * IQR$ to $Q3 + 1.5 * IQR$. Any observations that fall outside of this range are considered outliers. This method is useful for identifying potential outliers in a dataset and can help to ensure that statistical analyses are robust and accurate.
 
@@ -1227,8 +1316,6 @@ quartiles <- quantile(merged_df$microbusiness_density, probs = seq(0, 1, 0.25), 
          names = TRUE, type = 7, digits = 6)
 quartiles
 ```
-
-
 
 ```{r}
 # Calculate IQR of microbusiness_density column
@@ -1267,46 +1354,37 @@ sd_density <- sd(merged_df_new$microbusiness_density)
 # Create a range of values for the x-axis
 x_values <- seq(mean_density - 3*sd_density, mean_density + 3*sd_density, length.out = 1000)
 
-# Create a bell curve using the 'dnorm' function with mean and standard deviation calculated above
+# Create a bell curve with mean and standard deviation calculated above
 y_values <- dnorm(x_values, mean = mean_density, sd = sd_density)
 
-# Combine the 'x_values' and 'y_values' into a data frame using the 'data.frame' function
+# Combine the 'x_values' and 'y_values' into a data frame
 density_df <- data.frame(x = x_values, y = y_values)
 
-# Create a boxplot using the 'ggplot' function from 'ggplot2' package
+# Create a boxplot
 boxplot <- ggplot(data = merged_df_new, aes(x = "", y = merged_df_new$microbusiness_density)) +
   geom_boxplot(fill = "skyblue") +
 #  scale_y_log10() +
   labs(x = "", y = "Microbusiness Density") +
   ggtitle("Boxplot for Microbusiness Density")
 
-# Create a Q-Q plot using the 'ggplot' function from 'ggplot2' package and add a diagonal line using the 'geom_abline' function
+# Create a Q-Q plot and add a diagonal line
 qqplot <- ggplot(data = merged_df_new, aes(sample = microbusiness_density)) + 
   stat_qq() + 
   stat_qq_line(colour = "red") +
   labs(x = "Theoretical Normal Quantiles", y = "Observed Quantiles") +
   ggtitle("Q-Q Plot for Microbusiness Density")
 
-#  ggplot(data = density_df, aes(sample = x)) +
-#  geom_qq() +
-#  geom_abline(intercept = 0, slope = 1, colour = "red") +
-#  labs(x = "Theoretical Normal Quantiles", y = "Observed Quantiles") +
-#  ggtitle("Q-Q Plot for Microbusiness Density")
-
-
-
-# Create a bell curve using the 'ggplot' function from 'ggplot2' package and add the bell curve using the 'geom_line' function
+# Create a bell curve and add the bell curve 
 densityplot <- ggplot(data = merged_df_new, aes(x = microbusiness_density)) +
   geom_histogram(aes(y = after_stat(density)), bins = 30, colour = "black", fill = "white") +
   geom_line(data = density_df, aes(x = x, y = y), colour = "red", linewidth = 1) +
   labs(x = "Microbusiness Density", y = "Density") +
   ggtitle("Distribution of Microbusiness Density")
 
-# Arrange the plots in one row using the 'grid.arrange' function from the 'gridExtra' package
+# Arrange the plots in one row
 grid.arrange(densityplot, boxplot, qqplot, ncol = 3, widths = c(2, 1, 2))
 
 ```
-
 
 ```{r}
 # Calculate IQR of microbusiness_density column
@@ -1345,35 +1423,27 @@ sd_density <- sd(merged_df_clean$microbusiness_density)
 # Create a range of values for the x-axis
 x_values <- seq(mean_density - 3*sd_density, mean_density + 3*sd_density, length.out = 1000)
 
-# Create a bell curve using the 'dnorm' function with mean and standard deviation calculated above
+# Create a bell curve with mean and standard deviation calculated above
 y_values <- dnorm(x_values, mean = mean_density, sd = sd_density)
 
-# Combine the 'x_values' and 'y_values' into a data frame using the 'data.frame' function
+# Combine the 'x_values' and 'y_values' into a data frame
 density_df <- data.frame(x = x_values, y = y_values)
 
-# Create a boxplot using the 'ggplot' function from 'ggplot2' package
+# Create a boxplot
 boxplot <- ggplot(data = merged_df_clean, aes(x = "", y = merged_df_clean$microbusiness_density)) +
   geom_boxplot(fill = "skyblue") +
 #  scale_y_log10() +
   labs(x = "", y = "Microbusiness Density") +
   ggtitle("Boxplot for Microbusiness Density")
 
-# Create a Q-Q plot using the 'ggplot' function from 'ggplot2' package and add a diagonal line using the 'geom_abline' function
+# Create a Q-Q plot and add a diagonal line
 qqplot <- ggplot(data = merged_df_clean, aes(sample = microbusiness_density)) + 
   stat_qq() + 
   stat_qq_line(colour = "red") +
   labs(x = "Theoretical Normal Quantiles", y = "Observed Quantiles") +
   ggtitle("Q-Q Plot for Microbusiness Density")
 
-#  ggplot(data = density_df, aes(sample = x)) +
-#  geom_qq() +
-#  geom_abline(intercept = 0, slope = 1, colour = "red") +
-#  labs(x = "Theoretical Normal Quantiles", y = "Observed Quantiles") +
-#  ggtitle("Q-Q Plot for Microbusiness Density")
-
-
-
-# Create a bell curve using the 'ggplot' function from 'ggplot2' package and add the bell curve using the 'geom_line' function
+# Create a histogram and add the bell curve
 densityplot <- ggplot(data = merged_df_clean, aes(x = microbusiness_density)) +
   geom_histogram(aes(y = after_stat(density)), bins = 30, colour = "black", fill = "white") +
   geom_line(data = density_df, aes(x = x, y = y), colour = "red", linewidth = 1) +
@@ -1385,7 +1455,6 @@ grid.arrange(densityplot, boxplot, qqplot, ncol = 3, widths = c(2, 1, 2))
 
 ```
 
-
 ```{r fig.width=12, fig.height=4}
 # Calculate the mean and standard deviation of 'pct_bb'
 mean_pct_bb <- mean(merged_df$pct_bb)
@@ -1394,27 +1463,27 @@ sd_pct_bb <- sd(merged_df$pct_bb)
 # Create a range of values for the x-axis
 x_values <- seq(mean_pct_bb - 3*sd_pct_bb, mean_pct_bb + 3*sd_pct_bb, length.out = 1000)
 
-# Create a bell curve using the 'dnorm' function with mean and standard deviation calculated above
+# Create a bell curve with mean and standard deviation calculated above
 y_values <- dnorm(x_values, mean = mean_pct_bb, sd = sd_pct_bb)
 
-# Combine the 'x_values' and 'y_values' into a data frame using the 'data.frame' function
+# Combine the 'x_values' and 'y_values' into a data frame
 pct_bb_df <- data.frame(x = x_values, y = y_values)
 
-# Create a boxplot using the 'ggplot' function from 'ggplot2' package
+# Create a boxplot
 boxplot <- ggplot(data = merged_df, aes(x = "", y = merged_df$pct_bb)) +
   geom_boxplot(fill = "skyblue") +
   scale_y_log10() +
   labs(x = "", y = "Microbusiness pct_bb (logarithmic)") +
   ggtitle("Boxplot for Microbusiness pct_bb")
 
-# Create a Q-Q plot using the 'ggplot' function from 'ggplot2' package and add a diagonal line using the 'geom_abline' function
+# Create a Q-Q plot and add a diagonal line
 qqplot <- ggplot(data = merged_df, aes(sample = pct_bb)) + 
   stat_qq() + 
   stat_qq_line(colour = "red") +
   labs(x = "Theoretical Normal Quantiles", y = "Observed Quantiles") +
   ggtitle("Q-Q Plot for Microbusiness pct_bb")
 
-# Create a bell curve using the 'ggplot' function from 'ggplot2' package and add the bell curve using the 'geom_line' function
+# Create a histogram and add the bell curve
 densityplot <- ggplot(data = merged_df, aes(x = pct_bb)) +
   geom_histogram(aes(y = after_stat(density)), bins = 30, colour = "black", fill = "white") +
   geom_line(data = pct_bb_df, aes(x = x, y = y), colour = "red", linewidth = 1) +
@@ -1423,27 +1492,6 @@ densityplot <- ggplot(data = merged_df, aes(x = pct_bb)) +
 
 # Arrange the plots in one row using the 'grid.arrange' function from the 'gridExtra' package
 grid.arrange(densityplot, boxplot, qqplot, ncol = 3, widths = c(2, 1, 2))
-
-```
-```{r}
-# Calculate IQR of pct_bb column
-q <- quantile(merged_df_new$pct_bb, c(0.25, 0.75))
-iqr <- q[2] - q[1]
-
-# Calculate lower and upper bounds for outliers
-lower_bound <- q[1] - 1.5*iqr
-upper_bound <- q[2] + 1.5*iqr
-
-# Count number of outliers
-num_outliers <- sum(merged_df_new$pct_bb < lower_bound | merged_df_new$pct_bb > upper_bound)
-
-# Calculate percent of outliers
-percent_outliers <- num_outliers / length(merged_df_new$pct_bb) * 100
-
-# Print results
-cat("Number of outliers:", num_outliers, "\n")
-cat("Percent of outliers:", percent_outliers, "%\n")
-
 
 ```
 
@@ -1478,6 +1526,11 @@ cat("Percent of outliers:", percent_outliers, "%\n")
 }
 
 ```
+
+### 
+
+## 3.9. Non-Parametric Test
+
 ```{r}
 # Specify a list of column pairs to compare
 col_pairs <- list(c("microbusiness_density", "pct_bb"), c("microbusiness_density", "pct_college"), c("microbusiness_density", "pct_foreign_born"), c("microbusiness_density", "pct_it_workers"), c("microbusiness_density", "median_hh_inc"))
@@ -1497,7 +1550,7 @@ for (pair in col_pairs) {
 # Specify a list of column pairs to compare
 col_pairs <- list(c("microbusiness_density", "pct_bb"), c("microbusiness_density", "pct_college"), c("microbusiness_density", "pct_foreign_born"), c("microbusiness_density", "pct_it_workers"), c("microbusiness_density", "median_hh_inc"))
 
-# Loop through each column pair and perform the Wilcoxon signed-rank test
+# Loop through each column pair and perform the Wilcoxon rank sum test
 for (pair in col_pairs) {
   test_result <- wilcox.test(merged_df_new[[pair[1]]], merged_df_new[[pair[2]]], paired = FALSE)
   cat(paste("Wilcoxon rank-sum test results for", pair[1], "and", pair[2], ":\n"))
@@ -1507,36 +1560,304 @@ for (pair in col_pairs) {
 
 
 ```
+
 The results show that for each pair of columns, the p-value is less than the significance level of 0.05, which means that we reject the null hypothesis that the median difference between the two columns is zero. Instead, we conclude that there is a statistically significant difference between the two columns.
 
 The results suggest that there is evidence to support the hypothesis that the population median of each column is different from the population median of microbusiness_density.
 
+kernel regression
+
+```{r}
+# create a vector of region names and their corresponding codes
+region_codes <- c("new england" = 1, 
+                   "mideast" = 2, 
+                   "great lakes" = 3, 
+                   "plains" = 4, 
+                   "southeast" = 5, 
+                   "southwest" = 6, 
+                   "rocky mountain" = 7, 
+                   "far west" = 8)
+
+# use the `match()` function to find the region code for each row in `merged_df_new$region`
+merged_df_new$region_code <- match(merged_df_new$region, names(region_codes))
+
+
+# create a vector of state names and their corresponding codes
+state_codes <- sort(unique(merged_df_new$state))
+state_codes <- setNames(1:length(state_codes), state_codes)
+
+# use the `match()` function to find the state code for each row in `merged_df_new$state`
+merged_df_new$state_code <- match(merged_df_new$state, names(state_codes))
+
+# print head of the updated dataframe
+head(merged_df_new)
+```
+
 ```{r}
 
-# Perform Kruskal-Wallis test on multiple variables
-kwtest_college <- kruskal.test(pct_college ~ region, data = merged_df)
-kwtest_foreign_born <- kruskal.test(pct_foreign_born ~ region, data = merged_df)
-kwtest_median_hh_inc <- kruskal.test(median_hh_inc ~ region, data = merged_df)
+# Select the columns with numeric data
+numeric_cols <- c("cfips", "state_code", "region_code", "microbusiness_density", "active", "year", "month", "pct_bb", "pct_college", "pct_foreign_born", "pct_it_workers", "median_hh_inc")
 
-# Print the test results
-print(kwtest_college)
-print(kwtest_foreign_born)
-print(kwtest_median_hh_inc)
+# Subset the dataframe with the selected columns
+merged_df_numeric <- merged_df_new[, numeric_cols]
+
+# Calculate the correlation matrix
+cor_matrix <- cor(merged_df_numeric, use="pairwise.complete.obs")
+
+# Plot the correlation matrix using ggcorrplot
+ggcorrplot(cor_matrix, 
+           hc.order = TRUE, 
+           type = "lower", 
+           method = "square",
+           lab = TRUE, 
+           lab_size = 3, 
+           title = "Correlation Plot of merged_df_new", 
+           colors = c("#6D9EC1", "#FAC200", "#FA5252"), 
+           ggtheme = ggplot2::theme_gray, 
+           show.legend = TRUE)
 
 ```
-In all three cases, the p-value is reported to be less than 2.2e-16, which is smaller than the typical significance level of 0.05. Therefore, we can conclude that there is strong evidence to suggest that the medians of the different regions for each variable are not equal.
 
+The `cfips` column and `state_code` have a completely positive correlation. So, we will remove the redundant feature `state_code`. Also, `pct_bb` strongly correlates with `median_hh_inc` and `pct_college`. Also, `pct_college` strongly correlates with `microbusiness_density`, `median_hh_inc` and `pct_bb`. As features with moderate strong and strong correlation are redundant, we will remove these features (`pct_bb` and `pct_college`) before further analysis. Now, we draw the new correlation plot.
+
+```{r}
+
+# Select the columns with numeric data (not including "state_code", "pct_bb", "pct_college")
+numeric_cols <- c("cfips",  "region_code", "microbusiness_density", "active", "year", "month", "pct_foreign_born", "pct_it_workers", "median_hh_inc")
+
+# Subset the dataframe with the selected columns
+merged_df_numeric <- merged_df_new[, numeric_cols]
+
+# Calculate the correlation matrix
+cor_matrix <- cor(merged_df_numeric, use="pairwise.complete.obs")
+
+# Plot the correlation matrix using ggcorrplot
+ggcorrplot(cor_matrix, 
+           hc.order = TRUE, 
+           type = "lower", 
+           method = "square",
+           lab = TRUE, 
+           lab_size = 3, 
+           title = "Correlation Plot of merged_df_new", 
+           colors = c("#6D9EC1", "#FAC200", "#FA5252"), 
+           ggtheme = ggplot2::theme_gray, 
+           show.legend = TRUE)
+
+```
+
+```{r}
+
+# Split the dataset into training and testing sets
+set.seed(92) # for reproducibility
+train_index <- sample(nrow(merged_df_new), 0.7 * nrow(merged_df_new))
+train_data <- merged_df_new[train_index, ]
+test_data <- merged_df_new[-train_index, ]
+
+# Build the random forest model
+model <- randomForest(microbusiness_density ~ cfips + region_code + active + year + month + pct_foreign_born + pct_it_workers + median_hh_inc, 
+                      data = train_data)
+
+# Make predictions on the test set
+predictions <- predict(model, test_data)
+
+# Check the accuracy of the model
+accuracy <- sum(predictions == test_data$microbusiness_density) / nrow(test_data)
+cat("Accuracy:", accuracy, "\n")
+
+# Plot the variable importance
+varImpPlot(model, main = "Variable Importance Plot")
+
+
+
+
+```
+
+```{r}
+# Plot the variable importance
+varImpPlot(model, main = "Variable Importance Plot")
+
+```
+
+```{r}
+
+#NON-PARAMETRIC MODELS
+
+#Random Forest
+
+# Converting ‘microbusiness_density’ column to a factor datatype
+set.seed(92)
+
+# Training ‘random forest’ model 
+model <- train(microbusiness_data ~., data = merged_df_new,method = 'rf',trControl = trainControl(method = 'cv',number = 10))
+model
+#Building the model using another library to visualize
+x <- ctree(microbusiness_data ~ . , data= merged_df_new)
+plot(x, type="simple")
+```
+
+```{r}
+# subset the data to include only the columns of interest
+df <- merged_df_new[c("cfips", "region_code", "microbusiness_density", "active", "year", "month", "pct_foreign_born", "pct_it_workers", "median_hh_inc")]
+
+# separate predictor and response variables
+X <- as.matrix(df[, -4]) # exclude "active" column
+y <- as.matrix(df[, 4])  # only include "active" column
+
+# standardize the predictor variables
+X <- scale(X)
+
+# set the Lasso tuning parameter
+lambda <- 0.1
+
+# initialize coefficients and residuals
+beta <- rep(0, ncol(X))
+r <- y
+
+# set the convergence threshold
+eps <- 1e-6
+
+# perform coordinate descent to solve Lasso optimization problem
+while(TRUE) {
+  beta_old <- beta
+  
+  for(j in 1:ncol(X)) {
+    aj <- 2 * sum(X[, j]^2)
+    bj <- 2 * sum(X[, j] * (r + X[, j] * beta[j]))
+    if(bj < -lambda) {
+      beta[j] <- (bj + lambda) / aj
+    } else if(bj > lambda) {
+      beta[j] <- (bj - lambda) / aj
+    } else {
+      beta[j] <- 0
+    }
+    r <- r + X[, j] * (beta_old[j] - beta[j])
+  }
+  
+  if(max(abs(beta - beta_old)) < eps) {
+    break
+  }
+}
+
+# print the coefficients and their corresponding variable names
+lasso_coef <- cbind(beta, colnames(X))
+colnames(lasso_coef) <- c("Coefficients", "Variable")
+lasso_coef <- data.frame(lasso_coef)
+
+# convert the coefficients column to numeric
+lasso_coef$Coefficients <- as.numeric(lasso_coef$Coefficients)
+#lasso_coef <- lasso_coef[order(-lasso_coef$Coefficients),]
+
+# plot the coefficients
+ggplot(lasso_coef, aes(x = reorder(Variable, Coefficients), y = Coefficients)) +
+  geom_bar(stat = "identity") +
+  ggtitle("Lasso Regression Coefficients") +
+  xlab("Variable") +
+  ylab("Coefficient") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) 
+
+
+
+# plot the coefficients
+#barplot(lasso_coef$Coefficients, names.arg = lasso_coef$Variable, las = 2, col="steelblue", main="Lasso Regression Coefficients") 
+lasso_coef
+```
+
+```{r}
+str(merged_df_new)
+
+```
+
+```{r}
+# Load revealed_test.csv into a dataframe
+revealed_test_df <- read.csv("./datasets/revealed_test.csv")
+
+```
+
+```{r}
+merged_df_new |>
+  GGally::ggpairs(columns = c(17,18,2))
+```
+```{r}
+# Select relevant predictor columns
+predictors <- merged_df_new[, c("microbusiness_density", "cfips")]
+
+# Convert data to time series format
+ts_data <- ts(merged_df_new$microbusiness_density, start = c(2019, 8), frequency = 12)
+
+
+
+```
+
+```{r}
+# fit a simple exponential smoothing model to the time series data
+fit <- ets(ts_data, model = "ANN")
+
+
+# generate forecasts for the time series data using the fitted model
+forecast_values <- forecast(fit, h = 1)
+
+```
+
+```{r}
+plot(forecast_values, main = "Simple Exponential Smoothing Forecast", xlab = "Year", ylab = "Microbusiness Density")
+lines(ts_data, col = "blue")
+legend("topright", legend = c("Forecast", "Actual"), col = c("red", "blue"), lty = 1)
+
+```
+
+
+```{r}
+# Split data into training and testing sets
+train_data <- window(ts_data, end = c(2022, 2))
+test_data <- window(ts_data, start = c(2022, 3))
+
+# Train neural network autoregression model
+nnetar_model <- nnetar(ts_data)
+
+# Make forecasts using the trained model
+forecast_data <- forecast(nnetar_model, h = length(test_data))
+
+```
+
+```{r}
+# Estimate parameters
+fit <- merged_df_new |>
+  forecast::model(ETS(microbusiness_density ~ error("A") + trend("N") + season("N")))
+fc <- fit |>
+  forecast(h = 5)
+
+
+```
+
+
+```{r}
+# Plot forecasts and actual values
+plot(forecast_data, main = "Neural Network Autoregression Forecasts")
+lines(test_data, col = "blue")
+
+# Calculate accuracy metrics
+accuracy(forecast_data, test_data)
+
+
+
+```
 
 
 
 ```{r}
-# draft (this is a test plot)
+merged_df_new |>
+  GGally::ggpairs(columns = c(9,10))
+```
 
-# compute the correlation matrix
-corr_matrix <- cor(imputed_data)
+```{r}
+merged_df_new |>
+  GGally::ggpairs(columns = c(11:15))
+```
 
-# visualize the correlation matrix using corrplot
-corrplot(corr_matrix, type = "upper", method = "circle")
+```{r}
+merged_df_new |>
+  GGally::ggpairs(columns = c(6,7))
 ```
 
 ```{r}
@@ -1638,7 +1959,7 @@ ggplot(imputed_data, aes(x = "", y = pct_bb_2017)) +
 # draft (this is a test plot)
 
 # Scatter Plot
-ggplot(imputed_data, aes(x=median_hh_inc_2017, y=pct_it_workers_2017)) +
+ggplot(merged_df_new, aes(x=pct_bb, y=median_hh_inc)) +
   geom_point() +
   labs(title = "Percentage of IT Workers and Median Household Income in 2017",
        x = "Median Household Income", y = "Percentage of IT Workers")
