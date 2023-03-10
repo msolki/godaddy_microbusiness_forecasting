@@ -1412,7 +1412,7 @@ merged_df_clean <- merged_df_new[merged_df_new$microbusiness_density >= lower_bo
 
 # Print number of rows removed
 cat("Number of rows removed:", nrow(merged_df_new) - nrow(merged_df_clean), "\n")
-
+cat("Total rows removed:", nrow(merged_df) - nrow(merged_df_clean))
 ```
 
 ```{r fig.width=12, fig.height=4}
@@ -1521,13 +1521,40 @@ for (col in cols_to_analyze) {
   percent_outliers <- num_outliers / length(merged_df_new[[col]]) * 100
 
 # Print results
-cat("Number of outliers:", num_outliers, "\n")
-cat("Percent of outliers:", percent_outliers, "%\n")
+cat("Number of outliers in", col,":", num_outliers, "\n")
+cat("Percent of outliers in", col,":", percent_outliers, "%\n")
 }
 
 ```
+```{r}
+# Create a copy of the original dataframe
+merged_df_clean <- merged_df_new
 
-### 
+# Loop through each column and detect outliers using the IQR method
+for (col in cols_to_analyze) {
+  # Calculate the interquartile range (IQR) of the column
+  q1 <- quantile(merged_df_clean[[col]], 0.25)
+  q3 <- quantile(merged_df_clean[[col]], 0.75)
+  iqr <- q3 - q1
+  
+  # Calculate the upper and lower bounds for outliers
+  upper_bound <- q3 + (1.5 * iqr)
+  lower_bound <- q1 - (1.5 * iqr)
+  
+  # Identify the outliers in the column
+  outliers <- merged_df_clean[[col]][merged_df_clean[[col]] > upper_bound | merged_df_clean[[col]] < lower_bound]
+  
+  # Remove the outliers from the dataframe
+  merged_df_clean <- merged_df_clean[!(merged_df_clean[[col]] %in% outliers), ]
+}
+
+# Print the dimensions of the original and cleaned dataframes
+cat("Original dataframe dimensions:", nrow(merged_df_new), "\n")
+cat("Cleaned dataframe dimensions:", nrow(merged_df_clean), "\n")
+cat("Total rows removed:", nrow(merged_df) - nrow(merged_df_clean), "\n")
+cat("Total percent removed:", 100 * (nrow(merged_df) - nrow(merged_df_clean)) / nrow(merged_df),"%", "\n")
+```
+
 
 ## 3.9. Non-Parametric Test
 
@@ -1580,6 +1607,7 @@ region_codes <- c("new england" = 1,
 
 # use the `match()` function to find the region code for each row in `merged_df_new$region`
 merged_df_new$region_code <- match(merged_df_new$region, names(region_codes))
+merged_df_clean$region_code <- match(merged_df_clean$region, names(region_codes))
 
 
 # create a vector of state names and their corresponding codes
@@ -1589,9 +1617,19 @@ state_codes <- setNames(1:length(state_codes), state_codes)
 # use the `match()` function to find the state code for each row in `merged_df_new$state`
 merged_df_new$state_code <- match(merged_df_new$state, names(state_codes))
 
+state_codes <- sort(unique(merged_df_clean$state))
+state_codes <- setNames(1:length(state_codes), state_codes)
+merged_df_clean$state_code <- match(merged_df_clean$state, names(state_codes))
+
 # print head of the updated dataframe
 head(merged_df_new)
 ```
+
+```{r}
+merged_df_new |>
+  GGally::ggpairs(columns = c(17,18,2))
+```
+
 
 ```{r}
 
@@ -1612,6 +1650,30 @@ ggcorrplot(cor_matrix,
            lab = TRUE, 
            lab_size = 3, 
            title = "Correlation Plot of merged_df_new", 
+           colors = c("#6D9EC1", "#FAC200", "#FA5252"), 
+           ggtheme = ggplot2::theme_gray, 
+           show.legend = TRUE)
+
+```
+```{r}
+
+# Select the columns with numeric data
+numeric_cols <- c("cfips", "state_code", "region_code", "microbusiness_density", "active", "year", "month", "pct_bb", "pct_college", "pct_foreign_born", "pct_it_workers", "median_hh_inc")
+
+# Subset the dataframe with the selected columns
+merged_df_numeric <- merged_df_clean[, numeric_cols]
+
+# Calculate the correlation matrix
+cor_matrix <- cor(merged_df_numeric, use="pairwise.complete.obs")
+
+# Plot the correlation matrix using ggcorrplot
+ggcorrplot(cor_matrix, 
+           hc.order = TRUE, 
+           type = "lower", 
+           method = "square",
+           lab = TRUE, 
+           lab_size = 3, 
+           title = "Correlation Plot of merged_df_clean", 
            colors = c("#6D9EC1", "#FAC200", "#FA5252"), 
            ggtheme = ggplot2::theme_gray, 
            show.legend = TRUE)
@@ -1645,6 +1707,7 @@ ggcorrplot(cor_matrix,
 
 ```
 
+## 3.10. Feature Importance Using Random Forest
 ```{r}
 
 # Split the dataset into training and testing sets
@@ -1661,132 +1724,39 @@ model <- randomForest(microbusiness_density ~ cfips + region_code + active + yea
 predictions <- predict(model, test_data)
 
 # Check the accuracy of the model
-accuracy <- sum(predictions == test_data$microbusiness_density) / nrow(test_data)
-cat("Accuracy:", accuracy, "\n")
+# accuracy <- sum(predictions == test_data$microbusiness_density) / nrow(test_data)
+# cat("Accuracy:", accuracy, "\n")
 
 # Plot the variable importance
 varImpPlot(model, main = "Variable Importance Plot")
 
-
-
-
 ```
 
-```{r}
-# Plot the variable importance
-varImpPlot(model, main = "Variable Importance Plot")
 
-```
-
-```{r}
-
-#NON-PARAMETRIC MODELS
-
-#Random Forest
-
-# Converting ‘microbusiness_density’ column to a factor datatype
-set.seed(92)
-
-# Training ‘random forest’ model 
-model <- train(microbusiness_data ~., data = merged_df_new,method = 'rf',trControl = trainControl(method = 'cv',number = 10))
-model
-#Building the model using another library to visualize
-x <- ctree(microbusiness_data ~ . , data= merged_df_new)
-plot(x, type="simple")
-```
-
-```{r}
-# subset the data to include only the columns of interest
-df <- merged_df_new[c("cfips", "region_code", "microbusiness_density", "active", "year", "month", "pct_foreign_born", "pct_it_workers", "median_hh_inc")]
-
-# separate predictor and response variables
-X <- as.matrix(df[, -4]) # exclude "active" column
-y <- as.matrix(df[, 4])  # only include "active" column
-
-# standardize the predictor variables
-X <- scale(X)
-
-# set the Lasso tuning parameter
-lambda <- 0.1
-
-# initialize coefficients and residuals
-beta <- rep(0, ncol(X))
-r <- y
-
-# set the convergence threshold
-eps <- 1e-6
-
-# perform coordinate descent to solve Lasso optimization problem
-while(TRUE) {
-  beta_old <- beta
-  
-  for(j in 1:ncol(X)) {
-    aj <- 2 * sum(X[, j]^2)
-    bj <- 2 * sum(X[, j] * (r + X[, j] * beta[j]))
-    if(bj < -lambda) {
-      beta[j] <- (bj + lambda) / aj
-    } else if(bj > lambda) {
-      beta[j] <- (bj - lambda) / aj
-    } else {
-      beta[j] <- 0
-    }
-    r <- r + X[, j] * (beta_old[j] - beta[j])
-  }
-  
-  if(max(abs(beta - beta_old)) < eps) {
-    break
-  }
-}
-
-# print the coefficients and their corresponding variable names
-lasso_coef <- cbind(beta, colnames(X))
-colnames(lasso_coef) <- c("Coefficients", "Variable")
-lasso_coef <- data.frame(lasso_coef)
-
-# convert the coefficients column to numeric
-lasso_coef$Coefficients <- as.numeric(lasso_coef$Coefficients)
-#lasso_coef <- lasso_coef[order(-lasso_coef$Coefficients),]
-
-# plot the coefficients
-ggplot(lasso_coef, aes(x = reorder(Variable, Coefficients), y = Coefficients)) +
-  geom_bar(stat = "identity") +
-  ggtitle("Lasso Regression Coefficients") +
-  xlab("Variable") +
-  ylab("Coefficient") +
-  theme_bw() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1)) 
-
-
-
-# plot the coefficients
-#barplot(lasso_coef$Coefficients, names.arg = lasso_coef$Variable, las = 2, col="steelblue", main="Lasso Regression Coefficients") 
-lasso_coef
-```
-
-```{r}
-str(merged_df_new)
-
-```
 
 ```{r}
 # Load revealed_test.csv into a dataframe
 revealed_test_df <- read.csv("./datasets/revealed_test.csv")
 
+# Change first_day_of_month format in "revealed_test_df" to Date
+revealed_test_df$first_day_of_month <- as.Date(revealed_test_df$first_day_of_month)
 ```
 
-```{r}
-merged_df_new |>
-  GGally::ggpairs(columns = c(17,18,2))
-```
+# 4. Time Series Forecasting
+## 4.1 Exponential Forecasting
+Forecasts produced using exponential smoothing methods are weighted averages of past observations, with the weights decaying exponentially as the observations get older. In other words, the more recent the observation the higher the associated weight. This framework generates reliable forecasts quickly and for a wide range of time series, which is a great advantage and of major importance to applications in industry.
+### 4.1.1. Simple Exponential Smoothing Forecast
+Exponential smoothing is a general technique for smoothing time series data by giving more weight to recent observations. The simplest of the exponentially smoothing methods is naturally called simple exponential smoothing (SES). This method is suitable for forecasting data with no clear trend or seasonal pattern. (There is a grow in the last few years, which might suggest a trend. We will consider whether a trended method would be better for this series later.) 
 ```{r}
 # Select relevant predictor columns
-predictors <- merged_df_new[, c("microbusiness_density", "cfips")]
+# predictors <- merged_df_new[, c("microbusiness_density", "cfips")]
+
+merged_df_ts <- merged_df_clean %>%
+  group_by(first_day_of_month) %>%
+  summarise(microbusiness_density = mean(microbusiness_density))
 
 # Convert data to time series format
-ts_data <- ts(merged_df_new$microbusiness_density, start = c(2019, 8), frequency = 12)
-
-
-
+ts_data <- ts(merged_df_ts$microbusiness_density, start = c(2019, 8), frequency = 12)
 ```
 
 ```{r}
@@ -1795,18 +1765,18 @@ fit <- ets(ts_data, model = "ANN")
 
 
 # generate forecasts for the time series data using the fitted model
-forecast_values <- forecast(fit, h = 1)
+forecast_values <- forecast::forecast(fit, h = 8)
 
 ```
 
 ```{r}
 plot(forecast_values, main = "Simple Exponential Smoothing Forecast", xlab = "Year", ylab = "Microbusiness Density")
+lines(forecast_values$fitted, col = "red")
 lines(ts_data, col = "blue")
-legend("topright", legend = c("Forecast", "Actual"), col = c("red", "blue"), lty = 1)
+legend("bottomleft", legend = c("Forecast", "Actual"), col = c("red", "blue"), lty = 1)
 
 ```
-
-
+The forecasts for the period 11/2022 to 06/2023 are plotted in above. Also, plotted are one-step-ahead fitted values alongside the data over the period 08/2019 to 10/2022.
 ```{r}
 # Split data into training and testing sets
 train_data <- window(ts_data, end = c(2022, 2))
@@ -1816,16 +1786,54 @@ test_data <- window(ts_data, start = c(2022, 3))
 nnetar_model <- nnetar(ts_data)
 
 # Make forecasts using the trained model
-forecast_data <- forecast(nnetar_model, h = length(test_data))
+forecast_data <- forecast::forecast(nnetar_model, h = length(test_data))
 
 ```
 
 ```{r}
-# Estimate parameters
-fit <- merged_df_new |>
-  forecast::model(ETS(microbusiness_density ~ error("A") + trend("N") + season("N")))
-fc <- fit |>
-  forecast(h = 5)
+
+# Convert data to time series format
+ts_data <- ts(merged_df_ts$microbusiness_density, start = c(2019, 8), frequency = 12)
+
+# Split data into training and testing sets
+train_data <- window(ts_data, end = c(2022, 2))
+test_data <- window(ts_data, start = c(2022, 3))
+
+# Fit a neural network autoregression model with error("A"), trend("N"), season("N") preferences
+nnetar_model <- nnetar(train_data, lambda = 0, P = 12, size = 10, repeats = 10, 
+                       decay = 0.5, maxit = 1000, trace = TRUE, 
+                       entropy = FALSE, parallel = FALSE, xreg = NULL)
+
+# Make predictions using the fitted model
+nnetar_fc <- forecast::forecast(nnetar_model, h = length(test_data))
+
+# Print the forecasted values
+print(nnetar_fc$mean)
+
+```
+
+```{r}
+# Plot actual and predicted values for comparison
+plot(ts_data, type = "l", main = "Neural Network Autoregression")
+#lines(nnetar_fc$mean, col = "blue")
+legend("topleft", legend = c("Actual", "Predicted"), col = c("black", "blue"), lty = 1)
+
+# Calculate accuracy measures
+forecast::accuracy(nnetar_fc$mean, test_data)
+
+# Calculate forecast errors
+nnetar_errors <- test_data - nnetar_fc$mean
+mean(nnetar_errors)
+sd(nnetar_errors)
+
+```
+
+
+```{r}
+plot(nnetar_fc, main = "Neural network autoregression Forecast", xlab = "Year", ylab = "Microbusiness Density")
+lines(nnetar_fc$mean, col = "red")
+#lines(ts_data, col = "blue")
+legend("bottomleft", legend = c("Forecast", "Actual"), col = c("red", "blue"), lty = 1)
 
 
 ```
@@ -1836,151 +1844,5 @@ fc <- fit |>
 plot(forecast_data, main = "Neural Network Autoregression Forecasts")
 lines(test_data, col = "blue")
 
-# Calculate accuracy metrics
-accuracy(forecast_data, test_data)
-
-
-
 ```
 
-
-
-```{r}
-merged_df_new |>
-  GGally::ggpairs(columns = c(9,10))
-```
-
-```{r}
-merged_df_new |>
-  GGally::ggpairs(columns = c(11:15))
-```
-
-```{r}
-merged_df_new |>
-  GGally::ggpairs(columns = c(6,7))
-```
-
-```{r}
-# draft (this is a test plot)
-
-# Calculate the correlation matrix
-cor_mat <- cor(imputed_data)
-
-# Melt the correlation matrix to a long format
-melted_cor <- melt(cor_mat)
-
-# Generate the heatmap
-ggplot(melted_cor, aes(x=Var1, y=Var2, fill=value)) + 
-  geom_tile() +
-  scale_fill_gradient2(low = "blue", high = "red", mid = "white", 
-                       midpoint = 0, limit = c(-1,1), space = "Lab", 
-                       name="Pearson\nCorrelation") +
-  theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, vjust = 1, 
-                                   size = 8, hjust = 1),
-        axis.text.y = element_text(size = 8),
-        axis.title = element_blank(),
-        panel.grid.major = element_blank(),
-        panel.grid.minor = element_blank(),
-        legend.justification = c(1, 0),
-        legend.position = c(0.8, 0.2),
-        legend.direction = "horizontal") 
-
-```
-
-```{r}
-str(imputed_data)
-```
-
-```{r}
-# draft (this is a test plot)
-
-# Bar Plot
-ggplot(imputed_data, aes(x=cfips, y=median_hh_inc_2017)) +
-  geom_bar(stat="identity", fill="steelblue") +
-  labs(title = "Median Household Income in 2017",
-       x = "County FIPS Code", y = "Median Household Income")
-
-```
-
-```{r}
-# draft (this is a test plot)
-# Pie Chart
-ggplot(imputed_data, aes(x="", y=pct_foreign_born_2017, fill=cfips)) +
-  geom_bar(width = 1, stat = "identity") +
-  coord_polar("y", start=0) +
-  labs(title = "Percentage of Foreign-born Population in 2017",
-       fill = "County FIPS Code")
-
-```
-
-```{r fig.width=4.5 ,fig.height = 4,out.width='100%', fig.align='center'}
-# draft (this is a test plot)
-#creating a boxplot
-ggplot(merged_df, aes("", microbusiness_density)) +
-  geom_boxplot()+scale_fill_manual(values = c("0" = "#009999","1" = "#CC3300"))
-```
-
-```{r}
-# draft (this is a test plot)
-
-# Create the plot
-ggplot(merged_df, aes(x = "", y = microbusiness_density)) +
-  geom_boxplot(fill = "lightblue") +
-  #labs(title = "doesn;t matter",
-  #     x = NULL, y = NULL) +
-  theme_minimal()
-```
-
-```{r}
-# draft (this is a test plot)
-
-# Create the plot
-ggplot(imputed_data, aes(x = "", y = pct_bb_2021)) +
-  geom_boxplot(fill = "lightblue") +
-  labs(title = "Percentage of Population with Broadband Access in 2021",
-       x = NULL, y = "Percentage") +
-  theme_minimal()
-
-```
-
-```{r}
-# draft (this is a test plot)
-
-# Create the box plot
-ggplot(imputed_data, aes(x = "", y = pct_bb_2017)) +
-  geom_boxplot(fill = "lightblue", color = "blue") +
-  labs(title = "Percentage of Broadband Access in 2017", y = "Percentage") +
-  theme_bw()
-
-```
-
-```{r}
-# draft (this is a test plot)
-
-# Scatter Plot
-ggplot(merged_df_new, aes(x=pct_bb, y=median_hh_inc)) +
-  geom_point() +
-  labs(title = "Percentage of IT Workers and Median Household Income in 2017",
-       x = "Median Household Income", y = "Percentage of IT Workers")
-
-```
-
-```{r}
-# Heatmap
-imputed_data_long <- melt(imputed_data, id.vars="cfips", 
-                          measure.vars=c("pct_bb_2017", "pct_bb_2018", "pct_bb_2019", 
-                                         "pct_bb_2020", "pct_bb_2021"), 
-                          variable.name="year", value.name="pct_bb")
-
-ggplot(imputed_data_long, aes(x=cfips, y=year, fill=pct_bb)) +
-  geom_tile() +
-  scale_fill_gradient(low="white", high="steelblue") +
-  labs(title = "Percentage of Broadband Coverage",
-       x = "County FIPS Code", y = "Year")
-
-```
-
-# Add boxplots to a scatterplot
-
-par(fig=c(0,0.8,0,0.8), new=TRUE) plot(mtcars$wt, mtcars$mpg, xlab="Car Weight", ylab="Miles Per Gallon") par(fig=c(0,0.8,0.55,1), new=TRUE) boxplot(mtcars$wt, horizontal=TRUE, axes=FALSE) par(fig=c(0.65,1,0,0.8),new=TRUE) boxplot(mtcars$mpg, axes=FALSE) mtext("Enhanced Scatterplot", side=3, outer=TRUE, line=-3)
