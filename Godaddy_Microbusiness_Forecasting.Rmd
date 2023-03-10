@@ -1075,14 +1075,14 @@ geom_polygon(color = "black") +
              label.size = 0.2,
              fill = "gray75", color = "black") +
 scale_fill_gradient(low = "gray85", high = "darkred") +
-labs(title = "Average Median Household inc Per Region", fill = "Avg inc") +
+labs(title = "Average Median Household Income Per Region", fill = "Avg inc") +
 theme_void()
 
 grid.arrange(p1, p2, p3, p4, p5, nrow = 5)
 
 ```
 
-```{r fig.width=6, fig.height=8}
+```{r fig.width=4, fig.height=8}
 
 state_avg <- aggregate(cbind(pct_bb, pct_college, pct_foreign_born, pct_it_workers, median_hh_inc) ~ state, data = merged_df, FUN = mean)
 
@@ -1154,7 +1154,7 @@ grid.arrange(heatmap_bb, heatmap_college, heatmap_foreign_born, heatmap_it_worke
 
 ```
 
-```{r fig.width=6, fig.height=8}
+```{r fig.width=4, fig.height=8}
 
 county_avg <- aggregate(cbind(pct_bb, pct_college, pct_foreign_born, pct_it_workers, median_hh_inc) ~ county + state, data = merged_df, FUN = mean)
 
@@ -1230,8 +1230,8 @@ grid.arrange(heatmap_bb, heatmap_college, heatmap_foreign_born, heatmap_it_worke
 
 ```
 
-```{r fig.height=10, fig.width=4}
-par(mfrow=c(3,2)) # set plot layout to 3 rows and 2 columns
+```{r fig.height=5, fig.width=6}
+par(mfrow=c(2,3)) # set plot layout to 3 rows and 2 columns
 boxplot(merged_df$median_hh_inc, col = "pink", main = "Median Household Income")
 boxplot(merged_df$pct_college, col = "pink", main = "Percentage with College Education")
 boxplot(merged_df$pct_foreign_born, col = "pink", main = "Percentage of Foreign-born Residents")
@@ -1526,6 +1526,7 @@ cat("Percent of outliers in", col,":", percent_outliers, "%\n")
 }
 
 ```
+
 ```{r}
 # Create a copy of the original dataframe
 merged_df_clean <- merged_df_new
@@ -1554,7 +1555,6 @@ cat("Cleaned dataframe dimensions:", nrow(merged_df_clean), "\n")
 cat("Total rows removed:", nrow(merged_df) - nrow(merged_df_clean), "\n")
 cat("Total percent removed:", 100 * (nrow(merged_df) - nrow(merged_df_clean)) / nrow(merged_df),"%", "\n")
 ```
-
 
 ## 3.9. Non-Parametric Test
 
@@ -1630,7 +1630,6 @@ merged_df_new |>
   GGally::ggpairs(columns = c(17,18,2))
 ```
 
-
 ```{r}
 
 # Select the columns with numeric data
@@ -1655,6 +1654,7 @@ ggcorrplot(cor_matrix,
            show.legend = TRUE)
 
 ```
+
 ```{r}
 
 # Select the columns with numeric data
@@ -1708,6 +1708,7 @@ ggcorrplot(cor_matrix,
 ```
 
 ## 3.10. Feature Importance Using Random Forest
+
 ```{r}
 
 # Split the dataset into training and testing sets
@@ -1732,8 +1733,6 @@ varImpPlot(model, main = "Variable Importance Plot")
 
 ```
 
-
-
 ```{r}
 # Load revealed_test.csv into a dataframe
 revealed_test_df <- read.csv("./datasets/revealed_test.csv")
@@ -1743,10 +1742,11 @@ revealed_test_df$first_day_of_month <- as.Date(revealed_test_df$first_day_of_mon
 ```
 
 # 4. Time Series Forecasting
+
 ## 4.1 Exponential Forecasting
-Forecasts produced using exponential smoothing methods are weighted averages of past observations, with the weights decaying exponentially as the observations get older. In other words, the more recent the observation the higher the associated weight. This framework generates reliable forecasts quickly and for a wide range of time series, which is a great advantage and of major importance to applications in industry.
-### 4.1.1. Simple Exponential Smoothing Forecast
-Exponential smoothing is a general technique for smoothing time series data by giving more weight to recent observations. The simplest of the exponentially smoothing methods is naturally called simple exponential smoothing (SES). This method is suitable for forecasting data with no clear trend or seasonal pattern. (There is a grow in the last few years, which might suggest a trend. We will consider whether a trended method would be better for this series later.) 
+
+Forecasts produced using exponential smoothing methods are weighted averages of past observations, with the weights decaying exponentially as the observations get older. In other words, the more recent the observation the higher the associated weight. This framework generates reliable forecasts quickly and for a wide range of time series, which is a great advantage and of major importance to applications in industry. \### 4.1.1. Simple Exponential Smoothing Forecast Exponential smoothing is a general technique for smoothing time series data by giving more weight to recent observations. The simplest of the exponentially smoothing methods is naturally called simple exponential smoothing (SES). This method is suitable for forecasting data with no clear trend or seasonal pattern. (There is a grow in the last few years, which might suggest a trend. We will consider whether a trended method would be better for this series later.)
+
 ```{r}
 # Select relevant predictor columns
 # predictors <- merged_df_new[, c("microbusiness_density", "cfips")]
@@ -1776,7 +1776,9 @@ lines(ts_data, col = "blue")
 legend("bottomleft", legend = c("Forecast", "Actual"), col = c("red", "blue"), lty = 1)
 
 ```
+
 The forecasts for the period 11/2022 to 06/2023 are plotted in above. Also, plotted are one-step-ahead fitted values alongside the data over the period 08/2019 to 10/2022.
+
 ```{r}
 # Split data into training and testing sets
 train_data <- window(ts_data, end = c(2022, 2))
@@ -1816,7 +1818,7 @@ print(nnetar_fc$mean)
 # Plot actual and predicted values for comparison
 plot(ts_data, type = "l", main = "Neural Network Autoregression")
 #lines(nnetar_fc$mean, col = "blue")
-legend("topleft", legend = c("Actual", "Predicted"), col = c("black", "blue"), lty = 1)
+#legend("topleft", legend = c("Actual", "Predicted"), col = c("black", "blue"), lty = 1)
 
 # Calculate accuracy measures
 forecast::accuracy(nnetar_fc$mean, test_data)
@@ -1828,16 +1830,14 @@ sd(nnetar_errors)
 
 ```
 
-
 ```{r}
 plot(nnetar_fc, main = "Neural network autoregression Forecast", xlab = "Year", ylab = "Microbusiness Density")
-lines(nnetar_fc$mean, col = "red")
+lines(nnetar_fc$mean, col = "blue")
 #lines(ts_data, col = "blue")
 legend("bottomleft", legend = c("Forecast", "Actual"), col = c("red", "blue"), lty = 1)
 
 
 ```
-
 
 ```{r}
 # Plot forecasts and actual values
@@ -1845,4 +1845,3 @@ plot(forecast_data, main = "Neural Network Autoregression Forecasts")
 lines(test_data, col = "blue")
 
 ```
-
