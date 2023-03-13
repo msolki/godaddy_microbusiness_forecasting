@@ -1549,9 +1549,9 @@ for (col in cols_to_analyze) {
   merged_df_clean <- merged_df_clean[!(merged_df_clean[[col]] %in% outliers), ]
 }
 
-# Print the dimensions of the original and cleaned dataframes
-cat("Original dataframe dimensions:", nrow(merged_df_new), "\n")
-cat("Cleaned dataframe dimensions:", nrow(merged_df_clean), "\n")
+# Print the length of the original and cleaned dataframes
+cat("Original dataframe length:", nrow(merged_df_new), "\n")
+cat("Cleaned dataframe length:", nrow(merged_df_clean), "\n")
 cat("Total rows removed:", nrow(merged_df) - nrow(merged_df_clean), "\n")
 cat("Total percent removed:", 100 * (nrow(merged_df) - nrow(merged_df_clean)) / nrow(merged_df),"%", "\n")
 ```
@@ -1655,6 +1655,8 @@ ggcorrplot(cor_matrix,
 
 ```
 
+The above correlation plot belongs to our merged dataframe after removing the outliers from `microbusiness_density` column. The below correlation plot belongs to our merged dataframe after removing the outliers from the columns we imported from the **imputed_data** dataframe.
+
 ```{r}
 
 # Select the columns with numeric data
@@ -1680,15 +1682,15 @@ ggcorrplot(cor_matrix,
 
 ```
 
-The `cfips` column and `state_code` have a completely positive correlation. So, we will remove the redundant feature `state_code`. Also, `pct_bb` strongly correlates with `median_hh_inc` and `pct_college`. Also, `pct_college` strongly correlates with `microbusiness_density`, `median_hh_inc` and `pct_bb`. As features with moderate strong and strong correlation are redundant, we will remove these features (`pct_bb` and `pct_college`) before further analysis. Now, we draw the new correlation plot.
+The correlation percentage decreased after removing the outliers from our dataframe. The `cfips` column and `state_code` correlate completely positively. So, we will remove the redundant feature `state_code`. Also, `median_hh_inc` strongly correlates with `pct_bb` and `pct_college`. Also, `pct_college` has a moderately strong correlation with `microbusiness_density`, `median_hh_inc`, and `pct_bb`. Since features with strong correlations are redundant, we will remove `median_hh_inc` before further analysis. Still, we will not remove `pct_college` because there is a limited number of features, and this feature might be useful in forecasting the `microbusiness_density` value. Now, we will draw the new correlation plot.
 
 ```{r}
 
-# Select the columns with numeric data (not including "state_code", "pct_bb", "pct_college")
-numeric_cols <- c("cfips",  "region_code", "microbusiness_density", "active", "year", "month", "pct_foreign_born", "pct_it_workers", "median_hh_inc")
+# Select the columns with numeric data (not including "state_code", "median_hh_inc", )
+numeric_cols <- c("cfips",  "region_code", "microbusiness_density", "active", "year", "month", "pct_college", "pct_foreign_born", "pct_it_workers", "pct_bb")
 
 # Subset the dataframe with the selected columns
-merged_df_numeric <- merged_df_new[, numeric_cols]
+merged_df_numeric <- merged_df_clean[, numeric_cols]
 
 # Calculate the correlation matrix
 cor_matrix <- cor(merged_df_numeric, use="pairwise.complete.obs")
@@ -1700,7 +1702,7 @@ ggcorrplot(cor_matrix,
            method = "square",
            lab = TRUE, 
            lab_size = 3, 
-           title = "Correlation Plot of merged_df_new", 
+           title = "Correlation Plot of merged_df_clean", 
            colors = c("#6D9EC1", "#FAC200", "#FA5252"), 
            ggtheme = ggplot2::theme_gray, 
            show.legend = TRUE)
@@ -1708,6 +1710,8 @@ ggcorrplot(cor_matrix,
 ```
 
 ## 3.10. Feature Importance Using Random Forest
+
+Random Forest is a machine learning algorithm that is often used for classification and regression tasks. It is a type of ensemble learning method that combines the results of multiple decision trees to improve the accuracy of predictions. One of the advantages of Random Forest is that it provides a measure of feature importance that can be used to identify which variables are the most important for the model's performance. Feature importance using Random Forest is a powerful tool for analyzing and interpreting the predictive models and can be used for identifying the most important features for predicting the `microbusiness_density`.
 
 ```{r}
 
@@ -1718,11 +1722,11 @@ train_data <- merged_df_new[train_index, ]
 test_data <- merged_df_new[-train_index, ]
 
 # Build the random forest model
-model <- randomForest(microbusiness_density ~ cfips + region_code + active + year + month + pct_foreign_born + pct_it_workers + median_hh_inc, 
-                      data = train_data)
+model <- randomForest(microbusiness_density ~ cfips + region_code + active + year + month + pct_bb + pct_college + pct_foreign_born + pct_it_workers + median_hh_inc, 
+                      data = merged_df_clean)
 
 # Make predictions on the test set
-predictions <- predict(model, test_data)
+#predictions <- predict(model, test_data)
 
 # Check the accuracy of the model
 # accuracy <- sum(predictions == test_data$microbusiness_density) / nrow(test_data)
@@ -1731,7 +1735,12 @@ predictions <- predict(model, test_data)
 # Plot the variable importance
 varImpPlot(model, main = "Variable Importance Plot")
 
+# Print the variable importance scores
+varImp(model)
+
 ```
+
+The variable importance scores indicate how much each predictor contributes to the accuracy of the model in predicting the outcome. The higher the importance score, the more important the predictor is in the model. This output indicates that the most important predictors for predicting `microbusiness_density` are `active`, `pct_college`, `pct_foreign_born`, `pct_bb` and `cfips`, while `year` and `month` have the least impact on the model's performance. We will use these results to decide which predictors to include in the model and which ones to exclude.
 
 ```{r}
 # Load revealed_test.csv into a dataframe
@@ -1742,10 +1751,23 @@ revealed_test_df$first_day_of_month <- as.Date(revealed_test_df$first_day_of_mon
 ```
 
 # 4. Time Series Forecasting
+Based on the feature importance scores provided by the **Random Forest** model, we can identify which variables are most strongly associated with `microbusiness_density`. The variables that have the highest importance scores are likely to be the most important predictors of microbusiness_density.
+In this case, the variables with the highest importance scores are:
+- active (116924.3551)
+- pct_college (57310.5642)
+- pct_foreign_born (27024.1637)
+- pct_bb (24301.8238)
+- cfips (23658.8595)
+- region_code (17026.2925)
+- median_hh_inc (22442.3452)
+- pct_it_workers (14892.8354)
+Therefore, we can frame our forecasting problem as a cross-sectional data problem. To frame microbusiness_density forecasting as a cross-sectional data problem, we will use these variables as predictors in a statistical model. We will use the **merged_df_clean** dataset that includes these variables as well as `microbusiness_density` for a particular month and county. The goal would be to build a model that predicts the `microbusiness_density` of the county for that specific month, based on the other variables in the dataset.
 
-## 4.1 Exponential Forecasting
+## 4.1 Exponential Smoothing Forecasting
+Forecasts produced using exponential smoothing methods are weighted averages of past observations, with the weights decaying exponentially as the observations get older. In other words, the more recent the observation the higher the associated weight. This framework generates reliable forecasts quickly and for a wide range of time series, which is a great advantage and of major importance to applications in industry.
 
-Forecasts produced using exponential smoothing methods are weighted averages of past observations, with the weights decaying exponentially as the observations get older. In other words, the more recent the observation the higher the associated weight. This framework generates reliable forecasts quickly and for a wide range of time series, which is a great advantage and of major importance to applications in industry. \### 4.1.1. Simple Exponential Smoothing Forecast Exponential smoothing is a general technique for smoothing time series data by giving more weight to recent observations. The simplest of the exponentially smoothing methods is naturally called simple exponential smoothing (SES). This method is suitable for forecasting data with no clear trend or seasonal pattern. (There is a grow in the last few years, which might suggest a trend. We will consider whether a trended method would be better for this series later.)
+### 4.1.1. Simple Exponential Smoothing Forecast
+Exponential smoothing is a general technique for smoothing time series data by giving more weight to recent observations. The simplest of the exponentially smoothing methods is naturally called simple exponential smoothing (SES). This method is suitable for forecasting data with no clear trend or seasonal pattern. (There is a grow in the last few years, which might suggest a trend. We will consider whether a trended method would be better for this series later.)
 
 ```{r}
 # Select relevant predictor columns
@@ -1844,4 +1866,10 @@ legend("bottomleft", legend = c("Forecast", "Actual"), col = c("red", "blue"), l
 plot(forecast_data, main = "Neural Network Autoregression Forecasts")
 lines(test_data, col = "blue")
 
+```
+
+```{r}
+#merged_df_clean$first_day_of_month <- as.Date(merged_df_clean$first_day_of_month)
+str(merged_df_clean)
+colnames(merged_df_clean)
 ```
