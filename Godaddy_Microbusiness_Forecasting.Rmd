@@ -1769,6 +1769,24 @@ Forecasts produced using exponential smoothing methods are weighted averages of 
 ### 4.1.1. Simple Exponential Smoothing Forecast
 Exponential smoothing is a general technique for smoothing time series data by giving more weight to recent observations. The simplest of the exponentially smoothing methods is naturally called simple exponential smoothing (SES). This method is suitable for forecasting data with no clear trend or seasonal pattern. (There is a grow in the last few years, which might suggest a trend. We will consider whether a trended method would be better for this series later.)
 
+
+```{r}
+# Split the dataset into training and testing sets
+set.seed(92) # for reproducibility
+train_index <- sample(nrow(merged_df_clean), 0.7 * nrow(merged_df_clean))
+train_data <- merged_df_clean[train_index, ]
+test_data <- merged_df_clean[-train_index, ]
+
+# Build the random forest model
+model <- randomForest(microbusiness_density ~ cfips + region_code + active + year + month + pct_bb + pct_college + pct_foreign_born + pct_it_workers + median_hh_inc, 
+                      data = merged_df_clean)
+
+# Make predictions on the test set
+#predictions <- predict(model, test_data)
+
+```
+
+
 ```{r}
 # Select relevant predictor columns
 # predictors <- merged_df_new[, c("microbusiness_density", "cfips")]
@@ -1867,6 +1885,58 @@ plot(forecast_data, main = "Neural Network Autoregression Forecasts")
 lines(test_data, col = "blue")
 
 ```
+
+```{r}
+# Split data into training and test sets
+set.seed(123)
+trainIndex <- createDataPartition(merged_df_clean$microbusiness_density, p = 0.7, list = FALSE)
+train <- merged_df_clean[trainIndex, ]
+test <- merged_df_clean[-trainIndex, ]
+
+# Linear regression model
+lm_model <- lm(microbusiness_density ~ active + pct_college + pct_foreign_born + cfips + region_code + median_hh_inc + pct_it_workers, data = train)
+
+
+# Predictions on test set
+lm_pred <- predict(lm_model, newdata = test)
+
+# Model performance evaluation
+lm_rmse <- sqrt(mean((test$microbusiness_density - lm_pred)^2))
+
+
+#Print RMSE for each model
+cat("Linear Regression RMSE: ", lm_rmse, "\n")
+
+
+```
+```{r}
+# Decision tree model
+dt_model <- train(microbusiness_density ~ ., data = train, method = "rpart")
+
+
+dt_pred <- predict(dt_model, newdata = test)
+
+dt_rmse <- sqrt(mean((test$microbusiness_density - dt_pred)^2))
+
+
+cat("Decision Tree RMSE: ", dt_rmse, "\n")
+
+```
+
+```{r}
+# Random forest model
+rf_model <- randomForest(microbusiness_density ~ ., data = train, importance = TRUE, ntree = 500)
+
+rf_pred <- predict(rf_model, newdata = test)
+
+rf_rmse <- sqrt(mean((test$microbusiness_density - rf_pred)^2))
+
+cat("Random Forest RMSE: ", rf_rmse, "\n")
+
+```
+
+
+
 
 ```{r}
 #merged_df_clean$first_day_of_month <- as.Date(merged_df_clean$first_day_of_month)
