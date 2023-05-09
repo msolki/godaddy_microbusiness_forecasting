@@ -3,8 +3,11 @@ title: "GoDaddy - Microbusiness Density Forecasting"
 author: "Mohammad Solki"
 date: "2023-02-28"
 output:
-  html_document: default
+  word_document: default
   pdf_document: default
+  html_document: default
+editor_options:
+  chunk_output_type: inline
 ---
 
 # 1. Introduction
@@ -81,9 +84,10 @@ A great deal of data is publicly available about counties and we have not attemp
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(
-  echo = TRUE,
+  echo = FALSE,
   warning = FALSE,
-  out.width = '100%'
+  out.width = '100%',
+  fig.align = 'center'
   )
 ```
 
@@ -126,6 +130,7 @@ library(viridis)
 #library(KernSmooth)
 library(glmnet)
 library(randomForest)
+library(rpart)
 
 # libraries required for calculating SMAPE
 library(forecast)
@@ -1751,24 +1756,16 @@ revealed_test_df$first_day_of_month <- as.Date(revealed_test_df$first_day_of_mon
 ```
 
 # 4. Time Series Forecasting
-Based on the feature importance scores provided by the **Random Forest** model, we can identify which variables are most strongly associated with `microbusiness_density`. The variables that have the highest importance scores are likely to be the most important predictors of microbusiness_density.
-In this case, the variables with the highest importance scores are:
-- active (116924.3551)
-- pct_college (57310.5642)
-- pct_foreign_born (27024.1637)
-- pct_bb (24301.8238)
-- cfips (23658.8595)
-- region_code (17026.2925)
-- median_hh_inc (22442.3452)
-- pct_it_workers (14892.8354)
-Therefore, we can frame our forecasting problem as a cross-sectional data problem. To frame microbusiness_density forecasting as a cross-sectional data problem, we will use these variables as predictors in a statistical model. We will use the **merged_df_clean** dataset that includes these variables as well as `microbusiness_density` for a particular month and county. The goal would be to build a model that predicts the `microbusiness_density` of the county for that specific month, based on the other variables in the dataset.
+
+Based on the feature importance scores provided by the **Random Forest** model, we can identify which variables are most strongly associated with `microbusiness_density`. The variables that have the highest importance scores are likely to be the most important predictors of microbusiness_density. In this case, the variables with the highest importance scores are: - active (116924.3551) - pct_college (57310.5642) - pct_foreign_born (27024.1637) - pct_bb (24301.8238) - cfips (23658.8595) - region_code (17026.2925) - median_hh_inc (22442.3452) - pct_it_workers (14892.8354) Therefore, we can frame our forecasting problem as a cross-sectional data problem. To frame microbusiness_density forecasting as a cross-sectional data problem, we will use these variables as predictors in a statistical model. We will use the **merged_df_clean** dataset that includes these variables as well as `microbusiness_density` for a particular month and county. The goal would be to build a model that predicts the `microbusiness_density` of the county for that specific month, based on the other variables in the dataset.
 
 ## 4.1 Exponential Smoothing Forecasting
+
 Forecasts produced using exponential smoothing methods are weighted averages of past observations, with the weights decaying exponentially as the observations get older. In other words, the more recent the observation the higher the associated weight. This framework generates reliable forecasts quickly and for a wide range of time series, which is a great advantage and of major importance to applications in industry.
 
 ### 4.1.1. Simple Exponential Smoothing Forecast
-Exponential smoothing is a general technique for smoothing time series data by giving more weight to recent observations. The simplest of the exponentially smoothing methods is naturally called simple exponential smoothing (SES). This method is suitable for forecasting data with no clear trend or seasonal pattern. (There is a grow in the last few years, which might suggest a trend. We will consider whether a trended method would be better for this series later.)
 
+Exponential smoothing is a general technique for smoothing time series data by giving more weight to recent observations. The simplest of the exponentially smoothing methods is naturally called simple exponential smoothing (SES). This method is suitable for forecasting data with no clear trend or seasonal pattern. (There is a grow in the last few years, which might suggest a trend. We will consider whether a trended method would be better for this series later.)
 
 ```{r}
 # Split the dataset into training and testing sets
@@ -1778,14 +1775,13 @@ train_data <- merged_df_clean[train_index, ]
 test_data <- merged_df_clean[-train_index, ]
 
 # Build the random forest model
-model <- randomForest(microbusiness_density ~ cfips + region_code + active + year + month + pct_bb + pct_college + pct_foreign_born + pct_it_workers + median_hh_inc, 
+model <- randomForest(microbusiness_density ~ cfips + active + pct_bb + pct_college + pct_foreign_born, 
                       data = merged_df_clean)
 
 # Make predictions on the test set
-#predictions <- predict(model, test_data)
+predictions <- predict(model, test_data)
 
 ```
-
 
 ```{r}
 # Select relevant predictor columns
@@ -1819,124 +1815,59 @@ legend("bottomleft", legend = c("Forecast", "Actual"), col = c("red", "blue"), l
 
 The forecasts for the period 11/2022 to 06/2023 are plotted in above. Also, plotted are one-step-ahead fitted values alongside the data over the period 08/2019 to 10/2022.
 
+This confusion matrix shows the performance of the random forest model in predicting the microbusiness density for each category in the test set. The rows represent the predicted categories, and the columns represent the actual categories.
+
+For example, the value in the first row and first column (24) represents the number of test data points that were predicted to be in category 0 (i.e., a microbusiness density of 0) and were actually in category 0. The value in the second row and first column (272) represents the number of test data points that were predicted to be in category 1 (i.e., a microbusiness density of 1) and were actually in category 0.
+
+From the matrix, we can see that the model performed well for some classes (e.g., classes 0 and 9), but had more difficulty with others (e.g., classes 3, 4, and 5). We can also see that there were very few cases in some classes (e.g., class 9).
+
 ```{r}
-# Split data into training and testing sets
-train_data <- window(ts_data, end = c(2022, 2))
-test_data <- window(ts_data, start = c(2022, 3))
+write.csv(merged_df_clean, "merged_df_clean.csv")
+```
 
-# Train neural network autoregression model
-nnetar_model <- nnetar(ts_data)
+```{r fig.dim = c(12, 20)}
+# Load the rpart package
 
-# Make forecasts using the trained model
-forecast_data <- forecast::forecast(nnetar_model, h = length(test_data))
+# Subset the dataframe to include only relevant columns
+df <- merged_df_clean[, c("cfips", "pct_bb", "pct_college", "active", "microbusiness_density")]
+
+# Split the data into training and testing sets
+set.seed(92) # set seed for reproducibility
+train_idx <- sample(nrow(df), size = round(0.7 * nrow(df)), replace = FALSE)
+train <- df[train_idx, ]
+test <- df[-train_idx, ]
+
+# Build the decision tree model using training data
+tree <- rpart(microbusiness_density ~ active + pct_bb + pct_college, data = train)
+
+# Visualize the decision tree
+plot(tree)
+text(tree)
+
+# Make predictions on the testing data
+pred <- predict(tree, newdata = test)
+
+# Calculate the mean squared error of the predictions
+mse <- mean((test$microbusiness_density - pred)^2)
+mse
 
 ```
 
 ```{r}
-
-# Convert data to time series format
-ts_data <- ts(merged_df_ts$microbusiness_density, start = c(2019, 8), frequency = 12)
-
-# Split data into training and testing sets
-train_data <- window(ts_data, end = c(2022, 2))
-test_data <- window(ts_data, start = c(2022, 3))
-
-# Fit a neural network autoregression model with error("A"), trend("N"), season("N") preferences
-nnetar_model <- nnetar(train_data, lambda = 0, P = 12, size = 10, repeats = 10, 
-                       decay = 0.5, maxit = 1000, trace = TRUE, 
-                       entropy = FALSE, parallel = FALSE, xreg = NULL)
-
-# Make predictions using the fitted model
-nnetar_fc <- forecast::forecast(nnetar_model, h = length(test_data))
-
-# Print the forecasted values
-print(nnetar_fc$mean)
-
+print(tree)
 ```
 
 ```{r}
-# Plot actual and predicted values for comparison
-plot(ts_data, type = "l", main = "Neural Network Autoregression")
-#lines(nnetar_fc$mean, col = "blue")
-#legend("topleft", legend = c("Actual", "Predicted"), col = c("black", "blue"), lty = 1)
+# Predict the partition for each row in the dataframe
+tree_pred <- predict(tree, newdata = merged_df_clean)
 
-# Calculate accuracy measures
-forecast::accuracy(nnetar_fc$mean, test_data)
+# Create a factor variable based on the predicted values
+partition <- as.factor(tree_pred)
 
-# Calculate forecast errors
-nnetar_errors <- test_data - nnetar_fc$mean
-mean(nnetar_errors)
-sd(nnetar_errors)
+# Split the dataframe into multiple sub-dataframes based on the partition variable
+partitions <- split(merged_df_clean, partition)
 
 ```
-
-```{r}
-plot(nnetar_fc, main = "Neural network autoregression Forecast", xlab = "Year", ylab = "Microbusiness Density")
-lines(nnetar_fc$mean, col = "blue")
-#lines(ts_data, col = "blue")
-legend("bottomleft", legend = c("Forecast", "Actual"), col = c("red", "blue"), lty = 1)
-
-
-```
-
-```{r}
-# Plot forecasts and actual values
-plot(forecast_data, main = "Neural Network Autoregression Forecasts")
-lines(test_data, col = "blue")
-
-```
-
-```{r}
-# Split data into training and test sets
-set.seed(123)
-trainIndex <- createDataPartition(merged_df_clean$microbusiness_density, p = 0.7, list = FALSE)
-train <- merged_df_clean[trainIndex, ]
-test <- merged_df_clean[-trainIndex, ]
-
-# Linear regression model
-lm_model <- lm(microbusiness_density ~ active + pct_college + pct_foreign_born + cfips + region_code + median_hh_inc + pct_it_workers, data = train)
-
-
-# Predictions on test set
-lm_pred <- predict(lm_model, newdata = test)
-
-# Model performance evaluation
-lm_rmse <- sqrt(mean((test$microbusiness_density - lm_pred)^2))
-
-
-#Print RMSE for each model
-cat("Linear Regression RMSE: ", lm_rmse, "\n")
-
-
-```
-```{r}
-# Decision tree model
-dt_model <- train(microbusiness_density ~ ., data = train, method = "rpart")
-
-
-dt_pred <- predict(dt_model, newdata = test)
-
-dt_rmse <- sqrt(mean((test$microbusiness_density - dt_pred)^2))
-
-
-cat("Decision Tree RMSE: ", dt_rmse, "\n")
-
-```
-
-```{r}
-# Random forest model
-rf_model <- randomForest(microbusiness_density ~ ., data = train, importance = TRUE, ntree = 500)
-
-rf_pred <- predict(rf_model, newdata = test)
-
-rf_rmse <- sqrt(mean((test$microbusiness_density - rf_pred)^2))
-
-cat("Random Forest RMSE: ", rf_rmse, "\n")
-
-```
-
-
-
 
 ```{r}
 #merged_df_clean$first_day_of_month <- as.Date(merged_df_clean$first_day_of_month)

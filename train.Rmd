@@ -1,0 +1,70 @@
+---
+title: "Model Training"
+author: "Mohammad Solki"
+date: "2023-03-17"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+# assuming the data is stored in a file called merged_df_clean.csv
+merged_df_clean <- read.csv("merged_df_clean.csv")
+# filter the data for cfips = 1001
+data <- merged_df_clean[merged_df_clean$cfips == 1001, ]
+
+```
+
+
+```{r}
+library(caret)
+set.seed(123)
+# split the data into 80% training and 20% test sets
+trainIndex <- createDataPartition(data$microbusiness_density, p = 0.8, list = FALSE)
+train <- data[trainIndex, ]
+test <- data[-trainIndex, ]
+
+```
+
+```{r}
+library(xgboost)
+# define the parameters for the XGBoost model
+params <- list(
+  objective = "reg:squarederror",
+  eta = 0.1,
+  max_depth = 3,
+  min_child_weight = 1,
+  subsample = 0.8,
+  colsample_bytree = 0.8
+)
+
+# define the folds for cross-validation
+k <- 7
+folds <- createFolds(train$microbusiness_density, k = k, list = TRUE, returnTrain = FALSE)
+
+# create a vector to store the smape for each fold
+smape <- rep(0, k)
+
+# perform cross-validation
+for (i in 1:k) {
+  # split the data into training and validation sets for this fold
+  train_fold <- train[-folds[[i]], ]
+  valid_fold <- train[folds[[i]], ]
+  # convert data to DMatrix format required by XGBoost
+  dtrain <- xgb.DMatrix(data = train_fold[, c("pct_bb", "pct_college", "active")], label = train_fold$microbusiness_density)
+  dvalid <- xgb.DMatrix(data = valid_fold[, c("pct_bb", "pct_college", "active")], label = valid_fold$microbusiness_density)
+  # train the model
+  model <- xgb.train(params = params, data = dtrain, nrounds = 1000, watchlist = list(train = dtrain, valid = dvalid), verbose = FALSE)
+  # make predictions on the validation set
+  pred <- predict(model, newdata = as.matrix(valid_fold[, c("pct_bb", "pct_college", "active")]))
+  # calculate the smape for this fold
+  smape[i] <- mean(2 * abs(valid_fold$microbusiness_density - pred) / (valid_fold$microbusiness_density + pred)) * 100
+}
+
+# calculate the mean smape across all folds for each model
+mean_smape <- mean(smape)
+
+```
+
